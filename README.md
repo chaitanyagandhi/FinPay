@@ -159,9 +159,10 @@ Present:
 - Makefile, environment example, and development scripts (`doctor`, `java-home`, `db-shell`)
 - **Config server** — authenticated, serving shared and per-environment configuration, running as a
   container in the stack
+- **Service registry** — authenticated standalone Eureka server, running as a container in the stack
 
-**Not yet present:** service discovery, the gateway, database schemas, business logic, HTTP APIs, the
-frontend, and CI.
+**Not yet present:** the gateway, database schemas, business logic, HTTP APIs, the frontend, and CI.
+Nothing registers with Eureka yet — the domain services become discovery clients as they are built.
 
 Full setup, command reference, and troubleshooting: **[docs/local-development.md](docs/local-development.md)**.
 
@@ -222,6 +223,7 @@ make db       # psql into a service database as its own role
 | Kafka | `localhost:29092` | Single-node KRaft; `kafka:9092` from inside the network |
 | Kafka UI | http://localhost:8090 | 8080 is reserved for the API gateway |
 | Config server | http://localhost:8888 | HTTP Basic; `/actuator/health` is anonymous |
+| Eureka dashboard | http://localhost:8761 | HTTP Basic; `/actuator/health` is anonymous |
 
 Compose only contains the backing services for now. Application containers are added in the steps that
 implement them, so `docker compose up -d` always reaches a healthy state.
@@ -241,7 +243,7 @@ is overridable; `make env` copies it to a git-ignored `.env`.
 | Module | Port | Responsibility |
 | ------ | ---- | -------------- |
 | `config-server` | 8888 | Centralized configuration — **implemented** |
-| `service-registry` | 8761 | Eureka service discovery |
+| `service-registry` | 8761 | Eureka service discovery — **implemented** |
 | `api-gateway` | 8080 | Public entry point |
 | `auth-service` | 8081 | Authentication and tokens |
 | `user-service` | 8082 | Profiles and beneficiaries |

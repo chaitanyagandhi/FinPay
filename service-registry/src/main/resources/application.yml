@@ -2,5 +2,52 @@ spring:
   application:
     name: service-registry
 
+  security:
+    user:
+      name: ${EUREKA_USERNAME:finpay}
+      password: ${EUREKA_PASSWORD:finpay}
+
 server:
   port: 8761
+  shutdown: graceful
+  error:
+    include-stacktrace: never
+    include-message: never
+
+eureka:
+  instance:
+    hostname: ${EUREKA_HOSTNAME:localhost}
+    # Prefer the address other containers can actually reach over the container's own hostname.
+    prefer-ip-address: false
+
+  client:
+    # This is a single standalone registry, so it neither registers with nor fetches from a peer.
+    # Running a peer-replicated pair is a deployment concern, handled in the Kubernetes manifests.
+    register-with-eureka: false
+    fetch-registry: false
+    service-url:
+      defaultZone: http://${EUREKA_USERNAME:finpay}:${EUREKA_PASSWORD:finpay}@${eureka.instance.hostname}:${server.port}/eureka/
+
+  server:
+    # Self-preservation stops Eureka evicting instances when it loses too many heartbeats at once,
+    # which protects a real cluster from a network partition emptying the registry. With a handful
+    # of local instances that same behaviour keeps dead services listed for a long time, so compose
+    # turns it off. It stays on by default, which is the setting a real deployment wants.
+    enable-self-preservation: ${EUREKA_SELF_PRESERVATION:true}
+    eviction-interval-timer-in-ms: 15000
+    response-cache-update-interval-ms: 5000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when-authorized
+
+logging:
+  level:
+    root: INFO

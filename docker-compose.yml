@@ -178,7 +178,10 @@ services:
     build:
       # Root context: the Maven reactor needs the parent POM and the sibling module POMs.
       context: .
-      dockerfile: config-server/Dockerfile
+      dockerfile: infrastructure/docker/service.Dockerfile
+      args:
+        MODULE: config-server
+        SERVICE_PORT: "8888"
     image: finpay/config-server:0.1.0-SNAPSHOT
     container_name: finpay-config-server
     restart: unless-stopped
@@ -193,6 +196,42 @@ services:
     healthcheck:
       # Health is deliberately unauthenticated so this check needs no credentials.
       test: ["CMD-SHELL", "wget -q -O - http://localhost:8888/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks:
+      - finpay
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512m
+
+  service-registry:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/service.Dockerfile
+      args:
+        MODULE: service-registry
+        SERVICE_PORT: "8761"
+    image: finpay/service-registry:0.1.0-SNAPSHOT
+    container_name: finpay-service-registry
+    restart: unless-stopped
+    environment:
+      # The registry advertises this hostname to clients, so it has to be the name other
+      # containers resolve rather than the container's own id.
+      EUREKA_HOSTNAME: service-registry
+      EUREKA_USERNAME: ${EUREKA_USERNAME:-finpay}
+      EUREKA_PASSWORD: ${EUREKA_PASSWORD:-finpay}
+      # Off locally: with a handful of instances, self-preservation keeps services that are
+      # genuinely gone listed as UP for a long time. Deployments leave it on.
+      EUREKA_SELF_PRESERVATION: "false"
+      TZ: UTC
+    ports:
+      - "${EUREKA_PORT:-8761}:8761"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8761/actuator/health | grep -q '\"status\":\"UP\"'"]
       interval: 15s
       timeout: 5s
       retries: 10

@@ -3,9 +3,9 @@
 How to build FinPay and run its supporting infrastructure on your own machine.
 
 > **Scope.** At this point in the build the repository contains the Maven multi-module
-> project, the backing services (PostgreSQL, Redis, Kafka, Kafka UI), and the config server.
-> The remaining application services join `docker-compose.yml` in the steps that implement
-> them.
+> project, the backing services (PostgreSQL, Redis, Kafka, Kafka UI), the config server, and
+> the service registry. The remaining application services join `docker-compose.yml` in the
+> steps that implement them.
 
 ---
 
@@ -113,6 +113,7 @@ mistake shows up in your shell rather than at runtime.
 | Kafka | `localhost:29092` | `kafka:9092` |
 | Kafka UI | http://localhost:8090 | `kafka-ui:8080` |
 | Config server | http://localhost:8888 | `config-server:8888` |
+| Service registry | http://localhost:8761 | `service-registry:8761` |
 
 Kafka advertises two listeners. Use `localhost:29092` from your IDE, tests and host
 processes; containers use `kafka:9092`. Mixing them up produces a connection that succeeds
@@ -205,6 +206,50 @@ make images && make up
 Production would point the server at a dedicated Git configuration repository instead of the
 bundled files; the backend is selected by profile precisely so that swap needs no code
 change.
+
+---
+
+## Service discovery
+
+A standalone Eureka server runs on port 8761. Services register there and resolve each other
+by logical name, so an instance can move or scale out without any caller holding an address.
+
+The dashboard is at http://localhost:8761 and requires the same style of HTTP Basic
+credentials as the config server (`EUREKA_USERNAME` / `EUREKA_PASSWORD`, defaulting to
+`finpay:finpay`). `/actuator/health` is anonymous for healthchecks and probes.
+
+Inspect the registry directly:
+
+```bash
+curl -u finpay:finpay -H 'Accept: application/json' http://localhost:8761/eureka/apps
+```
+
+**Nothing registers yet.** The registry is running and verified, but the domain services
+become discovery clients as they are implemented, so the registry is empty until Phase 2.
+
+**Two deliberate choices:**
+
+- *The registry is not a config-server client.* Discovery is what everything else uses to
+  find anything at all; making it wait on another service to start would turn one outage into
+  two. Its configuration is local.
+- *Self-preservation is off locally, on by default.* Self-preservation stops Eureka evicting
+  instances when it loses many heartbeats at once, which protects a real cluster during a
+  network partition. With a handful of local instances the same behaviour leaves dead
+  services listed as UP for a long time, so `docker-compose.yml` disables it. The application
+  default stays `true`, which is what a deployment wants.
+
+### Container images
+
+All services share one parameterised build, `infrastructure/docker/service.Dockerfile`,
+selected by `MODULE` and `SERVICE_PORT` build arguments. Images are multi-stage (Maven build,
+JRE runtime), run as a non-root `finpay` user, and size the heap from the container limit
+rather than host memory.
+
+Rebuild after changing service source or served configuration:
+
+```bash
+make images && make up
+```
 
 ---
 
