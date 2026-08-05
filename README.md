@@ -145,21 +145,67 @@ Grafana Tempo · Kafka UI · Adminer/pgAdmin · MailHog
 
 ## Local Development Status
 
-Nothing is runnable yet. The repository currently contains:
+The Maven multi-module build compiles and its smoke tests pass. **No service does anything useful yet** —
+each module is a skeleton whose only test asserts that its Spring context starts.
 
-- Git repository initialized on `main`
-- `.gitignore`, `.editorconfig`, `.java-version`
-- This README
+Present:
 
-**Not yet present:** Maven modules, Docker Compose, any service implementation, the frontend, and CI.
+- Git repository on `main`, `.gitignore`, `.editorconfig`, `.java-version`
+- Maven wrapper (`./mvnw`, script-only — no committed jar) pinned to Maven 3.9.16
+- Parent POM managing Spring Boot 3.5.3 and Spring Cloud 2025.0.0, with compiler, Surefire, Failsafe,
+  JaCoCo, Spotless, and Enforcer configuration inherited by every module
+- Eleven backend service modules, each with an application class, `application.yml`, and a context-load test
 
-### Prerequisites (for upcoming steps)
+**Not yet present:** Docker Compose, database schemas, any business logic, HTTP endpoints, the frontend,
+and CI.
 
-- JDK 21
-- Docker and Docker Compose
+### Prerequisites
+
+- **JDK 21** (the build enforces 21.x and fails on any other major version)
+- Docker and Docker Compose (from Step 3)
 - Node.js 20+ (frontend, from Phase 7)
 
-Setup and run instructions will be added in `docs/local-development.md` as the build progresses.
+On macOS with Homebrew, `openjdk@21` is keg-only, so point `JAVA_HOME` at it explicitly:
+
+```bash
+export JAVA_HOME=/opt/homebrew/opt/openjdk@21
+```
+
+### Build
+
+```bash
+./mvnw clean verify
+```
+
+Single module plus its dependencies:
+
+```bash
+./mvnw -pl wallet-service -am clean verify
+```
+
+Apply code formatting (Spotless / palantir-java-format). `verify` fails if formatting is not applied:
+
+```bash
+./mvnw spotless:apply
+```
+
+### Module and port allocation
+
+| Module | Port | Responsibility |
+| ------ | ---- | -------------- |
+| `config-server` | 8888 | Centralized configuration |
+| `service-registry` | 8761 | Eureka service discovery |
+| `api-gateway` | 8080 | Public entry point |
+| `auth-service` | 8081 | Authentication and tokens |
+| `user-service` | 8082 | Profiles and beneficiaries |
+| `wallet-service` | 8083 | Balances and fund operations |
+| `transaction-service` | 8084 | Transactions and ledger |
+| `payment-service` | 8085 | Payment orchestration |
+| `fraud-service` | 8086 | Risk scoring |
+| `notification-service` | 8087 | Notifications |
+| `audit-service` | 8088 | Audit events |
+
+Full setup instructions will live in `docs/local-development.md` as the build progresses.
 
 ### Build order
 
