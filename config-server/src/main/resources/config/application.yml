@@ -1,0 +1,42 @@
+# Defaults served to every FinPay service, regardless of environment.
+#
+# This file is served by the config server, not used by it. Service-specific files
+# (auth-service.yml, wallet-service.yml, ...) and further environment overrides are added
+# alongside it as each service is implemented.
+#
+# Never put a secret in this file. Sensitive values belong in the environment of the
+# consuming service and are referenced here as ${ENV_VAR} placeholders.
+
+spring:
+  jackson:
+    # Money and time are the two things this platform cannot afford to get wrong in
+    # serialization, so the defaults are pinned rather than inherited.
+    serialization:
+      write-dates-as-timestamps: false
+      write-durations-as-timestamps: false
+      # BigDecimal must never be emitted in scientific notation: an amount that reaches a
+      # client as 1.0E+2 has already lost the scale the ledger depends on.
+      write-bigdecimal-as-plain: true
+    deserialization:
+      fail-on-unknown-properties: false
+    default-property-inclusion: non_null
+    time-zone: UTC
+
+server:
+  # Let in-flight requests finish before the JVM exits, so a rolling deploy cannot cut a
+  # payment operation in half.
+  shutdown: graceful
+  error:
+    # Stack traces, exception messages and binding details describe internals to callers.
+    # Errors are returned through each service's problem-details handler instead.
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
+    include-exception: false
+  servlet:
+    application-display-name: finpay
+
+logging:
+  level:
+    root: INFO
+    com.finpay: INFO

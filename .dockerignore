@@ -1,0 +1,26 @@
+# Keep the build context small and free of anything that must not reach an image.
+
+.git
+.github
+.idea
+.vscode
+.cursor
+
+# Build output: images build from source, never from host artefacts.
+**/target
+frontend/node_modules
+frontend/dist
+
+# Local secrets and state.
+.env
+.env.*
+!.env.example
+docker-data
+.infrastructure-data
+
+# Not needed to compile or run.
+docs
+*.md
+!README.md
+Makefile
+.editorconfig

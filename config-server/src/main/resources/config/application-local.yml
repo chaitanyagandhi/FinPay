@@ -1,0 +1,18 @@
+# Overrides for services running directly on the developer's machine (IDE, ./mvnw
+# spring-boot:run) against the Docker Compose infrastructure.
+#
+# Kafka advertises two listeners. From the host the broker is reachable at localhost:29092;
+# from inside the compose network it is kafka:9092. Using the wrong one produces a client
+# that connects, fetches metadata, and then fails on produce - so the address is pinned per
+# environment rather than guessed.
+
+spring:
+  kafka:
+    bootstrap-servers: localhost:29092
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      # Resolved from the environment of the consuming service; never stored here.
+      password: ${REDIS_PASSWORD:}

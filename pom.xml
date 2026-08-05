@@ -170,6 +170,11 @@
           <includes>
             <include>**/*IT.java</include>
           </includes>
+          <!-- Integration tests run after package, when spring-boot:repackage has already
+               replaced the main artifact with an executable jar whose classes live under
+               BOOT-INF. Pointing Failsafe back at target/classes keeps the application
+               classes visible to component scanning. -->
+          <classesDirectory>${project.build.outputDirectory}</classesDirectory>
         </configuration>
         <executions>
           <execution>

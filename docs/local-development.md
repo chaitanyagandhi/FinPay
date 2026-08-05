@@ -3,9 +3,9 @@
 How to build FinPay and run its supporting infrastructure on your own machine.
 
 > **Scope.** At this point in the build the repository contains the Maven multi-module
-> project and the backing services (PostgreSQL, Redis, Kafka, Kafka UI). No application
-> service is implemented yet, so there is nothing to call over HTTP. Application containers
-> join `docker-compose.yml` in the steps that implement them.
+> project, the backing services (PostgreSQL, Redis, Kafka, Kafka UI), and the config server.
+> The remaining application services join `docker-compose.yml` in the steps that implement
+> them.
 
 ---
 
@@ -63,7 +63,8 @@ Run `make` with no arguments for the current list.
 
 | Command | Effect |
 | ------- | ------ |
-| `make up` | Start Postgres, Redis, Kafka, Kafka UI; wait for health |
+| `make up` | Start everything; wait for health |
+| `make images` | Rebuild service images — needed after changing service source |
 | `make down` | Stop containers, **keep** all data |
 | `make stop` | Pause containers without removing them |
 | `make restart` | `down` then `up`, keeping data |
@@ -96,6 +97,7 @@ A single module and its dependencies:
 | `make db SERVICE=auth` | Same for any of auth, user, wallet, transaction, payment, fraud, notification, audit |
 | `make redis` | Authenticated `redis-cli` session |
 | `make topics` | List Kafka topics |
+| `make config` | Print what the config server serves (`PROFILE=local`, `APP=wallet-service`) |
 
 `make db` connects as the service's own role rather than the superuser, so a permissions
 mistake shows up in your shell rather than at runtime.
@@ -110,6 +112,7 @@ mistake shows up in your shell rather than at runtime.
 | Redis | `localhost:6379` | `redis:6379` |
 | Kafka | `localhost:29092` | `kafka:9092` |
 | Kafka UI | http://localhost:8090 | `kafka-ui:8080` |
+| Config server | http://localhost:8888 | `config-server:8888` |
 
 Kafka advertises two listeners. Use `localhost:29092` from your IDE, tests and host
 processes; containers use `kafka:9092`. Mixing them up produces a connection that succeeds
@@ -144,11 +147,64 @@ would run a separate instance per service. The isolation rule is enforced either
 
 ## Configuration
 
+### Local overrides
+
 Every value in `docker-compose.yml` has a working default, so the stack starts with no
 `.env` file. `.env.example` documents everything that is overridable — copy it with
 `make env` when you need to change a port or a password.
 
 `.env` is git-ignored. `.env.example` is committed and must never contain a real secret.
+
+### The config server
+
+Services fetch their configuration from the config server rather than carrying their own
+copy of shared settings. It runs on port 8888 and reads from `classpath:/config` inside its
+own jar, so nothing external has to be reachable for the platform to start.
+
+| File | Applies to |
+| ---- | ---------- |
+| `config/application.yml` | Every service, every environment |
+| `config/application-local.yml` | Services run on the host (`localhost:29092`, `localhost:6379`) |
+| `config/application-docker.yml` | Services run as containers (`kafka:9092`, `redis:6379`) |
+
+Per-service files (`auth-service.yml`, `wallet-service.yml`, …) are added as each service is
+implemented. Spring Cloud Config layers them: profile-specific values override shared
+defaults, and service-specific files override `application.yml`.
+
+Inspect what a service would receive:
+
+```bash
+make config                              # application, docker profile
+make config PROFILE=local                # host-facing addresses
+make config APP=wallet-service PROFILE=docker
+```
+
+Or directly — the endpoint pattern is `/{application}/{profile}`:
+
+```bash
+curl -u finpay:finpay http://localhost:8888/application/docker
+```
+
+**Authentication.** Every configuration endpoint requires HTTP Basic auth
+(`CONFIG_SERVER_USERNAME` / `CONFIG_SERVER_PASSWORD`, defaulting to `finpay:finpay`
+locally). `/actuator/health` is deliberately anonymous so container healthchecks and
+Kubernetes probes work without credentials.
+
+**Secrets are never stored here.** Sensitive values are written as `${ENV_VAR}` placeholders
+and served unresolved; the consuming service resolves them from its own environment. A unit
+test (`ServedConfigurationTest`) fails the build if a key matching password/secret/token ever
+gains a literal value.
+
+**Changing served configuration** means rebuilding the image, since the files ship inside the
+jar:
+
+```bash
+make images && make up
+```
+
+Production would point the server at a dedicated Git configuration repository instead of the
+bundled files; the backend is selected by profile precisely so that swap needs no code
+change.
 
 ---
 

@@ -1,0 +1,13 @@
+# Overrides for services running as containers inside the compose network, where
+# infrastructure is addressed by service name rather than through published host ports.
+
+spring:
+  kafka:
+    bootstrap-servers: kafka:9092
+
+  data:
+    redis:
+      host: redis
+      port: 6379
+      # Resolved from the environment of the consuming service; never stored here.
+      password: ${REDIS_PASSWORD:}

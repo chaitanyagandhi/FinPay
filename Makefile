@@ -20,11 +20,18 @@ CONTAINER ?=
 # Mirrors the docker-compose.yml default; override in .env or on the command line.
 REDIS_PASSWORD ?= finpay
 
+# Which configuration `make config` fetches, and the credentials it uses.
+APP             ?= application
+PROFILE         ?= docker
+CONFIG_USER     ?= finpay
+CONFIG_PASSWORD ?= finpay
+CONFIG_PORT     ?= 8888
+
 # Resolved once per invocation and exported to every recipe.
 export JAVA_HOME := $(shell $(SCRIPTS)/java-home.sh 2>/dev/null)
 
-.PHONY: help doctor env up down stop restart reset ps logs health \
-        build test verify format db redis topics clean
+.PHONY: help doctor env up images down stop restart reset ps logs health \
+        build test verify format db redis topics config clean
 
 ##@ Getting started
 
@@ -46,9 +53,12 @@ env: ## Create .env from .env.example if it does not exist
 
 ##@ Infrastructure
 
-up: ## Start Postgres, Redis, Kafka and Kafka UI, waiting until healthy
+up: ## Start the infrastructure and application services, waiting until healthy
 	@$(COMPOSE) up -d --wait
 	@$(MAKE) --no-print-directory ps
+
+images: ## Rebuild service container images (needed after changing service source)
+	@$(COMPOSE) build
 
 down: ## Stop containers, keeping all data
 	@$(COMPOSE) down
@@ -102,3 +112,7 @@ redis: ## Open an authenticated redis-cli session
 
 topics: ## List Kafka topics
 	@$(COMPOSE) exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
+
+config: ## Show configuration the config server serves (make config PROFILE=docker APP=application)
+	@curl -sS -u '$(CONFIG_USER):$(CONFIG_PASSWORD)' \
+	  http://localhost:$(CONFIG_PORT)/$(APP)/$(PROFILE) | python3 -m json.tool

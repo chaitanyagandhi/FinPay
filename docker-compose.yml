@@ -1,9 +1,8 @@
 # FinPay local development infrastructure.
 #
-# This file currently provides the backing services only: PostgreSQL, Redis, Kafka and
-# Kafka UI. Application containers (config server, service registry, gateway, the domain
-# services and the frontend) are added in the build steps that implement them, so that
-# `docker compose up -d` always reaches a healthy state.
+# Backing services (PostgreSQL, Redis, Kafka, Kafka UI) plus the application services that
+# have been implemented so far. The remaining application containers are added in the build
+# steps that implement them, so that `docker compose up -d` always reaches a healthy state.
 #
 # Credentials below are local development defaults. They are deliberately committed so the
 # stack starts with no additional setup; nothing here is used outside a developer machine.
@@ -165,6 +164,39 @@ services:
       timeout: 5s
       retries: 10
       start_period: 45s
+    networks:
+      - finpay
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512m
+
+  # --- Application services ---------------------------------------------------------------
+
+  config-server:
+    build:
+      # Root context: the Maven reactor needs the parent POM and the sibling module POMs.
+      context: .
+      dockerfile: config-server/Dockerfile
+    image: finpay/config-server:0.1.0-SNAPSHOT
+    container_name: finpay-config-server
+    restart: unless-stopped
+    environment:
+      # "docker" selects the in-network addresses the server hands to its clients.
+      SPRING_PROFILES_ACTIVE: docker
+      CONFIG_SERVER_USERNAME: ${CONFIG_SERVER_USERNAME:-finpay}
+      CONFIG_SERVER_PASSWORD: ${CONFIG_SERVER_PASSWORD:-finpay}
+      TZ: UTC
+    ports:
+      - "${CONFIG_SERVER_PORT:-8888}:8888"
+    healthcheck:
+      # Health is deliberately unauthenticated so this check needs no credentials.
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8888/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
     networks:
       - finpay
     deploy:
