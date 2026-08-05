@@ -1,0 +1,47 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+max_line_length = 120
+
+[*.java]
+indent_size = 4
+max_line_length = 120
+ij_java_use_single_class_imports = true
+ij_java_class_count_to_use_import_on_demand = 999
+ij_java_names_count_to_use_import_on_demand = 999
+
+[*.{xml,xsd,wsdl}]
+indent_size = 2
+
+[pom.xml]
+indent_size = 2
+
+[*.{yml,yaml}]
+indent_size = 2
+
+[*.{json,json5}]
+indent_size = 2
+
+[*.{js,jsx,ts,tsx,css,scss,html}]
+indent_size = 2
+
+[*.{md,markdown}]
+trim_trailing_whitespace = false
+
+[Makefile]
+indent_style = tab
+
+[*.{sh,bash}]
+indent_size = 2
+
+[*.properties]
+indent_size = 2
+
+[*.sql]
+indent_size = 2
