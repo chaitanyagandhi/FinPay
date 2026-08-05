@@ -155,9 +155,10 @@ Present:
 - Parent POM managing Spring Boot 3.5.3 and Spring Cloud 2025.0.0, with compiler, Surefire, Failsafe,
   JaCoCo, Spotless, and Enforcer configuration inherited by every module
 - Eleven backend service modules, each with an application class, `application.yml`, and a context-load test
+- Docker Compose stack for the backing services: PostgreSQL, Redis, Kafka (KRaft), and Kafka UI
 
-**Not yet present:** Docker Compose, database schemas, any business logic, HTTP endpoints, the frontend,
-and CI.
+**Not yet present:** database schemas, any business logic, HTTP endpoints, application containers, the
+frontend, and CI.
 
 ### Prerequisites
 
@@ -188,6 +189,35 @@ Apply code formatting (Spotless / palantir-java-format). `verify` fails if forma
 ```bash
 ./mvnw spotless:apply
 ```
+
+### Local infrastructure
+
+```bash
+docker compose config     # validate the effective configuration
+docker compose up -d      # start Postgres, Redis, Kafka, Kafka UI
+docker compose ps         # container state and health
+docker compose down       # stop, keep data
+docker compose down -v    # stop and delete all data (forces DB re-initialisation)
+```
+
+| Service | Host address | Notes |
+| ------- | ------------ | ----- |
+| PostgreSQL | `localhost:5432` | One database and owner role per service |
+| Redis | `localhost:6379` | Password protected, AOF persistence, `noeviction` |
+| Kafka | `localhost:29092` | Single-node KRaft; `kafka:9092` from inside the network |
+| Kafka UI | http://localhost:8090 | 8080 is reserved for the API gateway |
+
+Compose only contains the backing services for now. Application containers are added in the steps that
+implement them, so `docker compose up -d` always reaches a healthy state.
+
+**Database-per-service.** `infrastructure/docker/postgres/initdb/01-create-service-databases.sh` creates
+`finpay_auth`, `finpay_user`, `finpay_wallet`, `finpay_transaction`, `finpay_payment`, `finpay_fraud`,
+`finpay_notification`, and `finpay_audit`, each owned by a role of the same name, with
+`CONNECT` revoked from `PUBLIC`. A service holding the wrong credentials is rejected at connection time
+rather than silently reading another service's data. Locally these share one Postgres instance; a
+production deployment would use a separate instance per service.
+
+The committed credentials are local development defaults only. Override them with a git-ignored `.env`.
 
 ### Module and port allocation
 
