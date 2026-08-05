@@ -156,9 +156,12 @@ Present:
   JaCoCo, Spotless, and Enforcer configuration inherited by every module
 - Eleven backend service modules, each with an application class, `application.yml`, and a context-load test
 - Docker Compose stack for the backing services: PostgreSQL, Redis, Kafka (KRaft), and Kafka UI
+- Makefile, environment example, and development scripts (`doctor`, `java-home`, `db-shell`)
 
 **Not yet present:** database schemas, any business logic, HTTP endpoints, application containers, the
 frontend, and CI.
+
+Full setup, command reference, and troubleshooting: **[docs/local-development.md](docs/local-development.md)**.
 
 ### Prerequisites
 
@@ -166,7 +169,16 @@ frontend, and CI.
 - Docker and Docker Compose (from Step 3)
 - Node.js 20+ (frontend, from Phase 7)
 
-On macOS with Homebrew, `openjdk@21` is keg-only, so point `JAVA_HOME` at it explicitly:
+### Quick start
+
+```bash
+make doctor   # check prerequisites, Docker daemon, and port availability
+make up       # start the infrastructure, waiting until every container is healthy
+make verify   # full Maven build: format check, tests, coverage
+```
+
+`make` resolves a JDK 21 automatically, including Homebrew's keg-only `openjdk@21`. Run `make` with no
+arguments for the full command list. If you invoke `./mvnw` directly, set `JAVA_HOME` yourself:
 
 ```bash
 export JAVA_HOME=/opt/homebrew/opt/openjdk@21
@@ -175,7 +187,7 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@21
 ### Build
 
 ```bash
-./mvnw clean verify
+make verify
 ```
 
 Single module plus its dependencies:
@@ -187,17 +199,18 @@ Single module plus its dependencies:
 Apply code formatting (Spotless / palantir-java-format). `verify` fails if formatting is not applied:
 
 ```bash
-./mvnw spotless:apply
+make format
 ```
 
 ### Local infrastructure
 
 ```bash
-docker compose config     # validate the effective configuration
-docker compose up -d      # start Postgres, Redis, Kafka, Kafka UI
-docker compose ps         # container state and health
-docker compose down       # stop, keep data
-docker compose down -v    # stop and delete all data (forces DB re-initialisation)
+make up       # start Postgres, Redis, Kafka, Kafka UI; wait for health
+make ps       # container state and health
+make logs     # follow logs (make logs CONTAINER=kafka for one)
+make down     # stop, keep data
+make reset    # stop and delete all data, then start fresh (prompts first)
+make db       # psql into a service database as its own role
 ```
 
 | Service | Host address | Notes |
@@ -217,7 +230,8 @@ implement them, so `docker compose up -d` always reaches a healthy state.
 rather than silently reading another service's data. Locally these share one Postgres instance; a
 production deployment would use a separate instance per service.
 
-The committed credentials are local development defaults only. Override them with a git-ignored `.env`.
+The committed credentials are local development defaults only. `.env.example` documents everything that
+is overridable; `make env` copies it to a git-ignored `.env`.
 
 ### Module and port allocation
 
