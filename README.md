@@ -169,6 +169,8 @@ Present:
   structured JSON logging in containers
 - **Observability** — Actuator on an unpublished management port, Prometheus scraping every service,
   and distributed tracing exported over OTLP to Jaeger
+- **API documentation** — one aggregated Swagger page at the gateway; every service inherits the same
+  error envelope, failure responses, and auth scheme in its published spec
 
 **Not yet present:** database schemas, business logic, HTTP APIs, the frontend, and CI. The gateway is
 the only service registered with Eureka so far; routes resolve to nothing and return 503 until the
@@ -237,6 +239,7 @@ make db       # psql into a service database as its own role
 | API gateway | http://localhost:8080 | The only application port clients use |
 | Prometheus | http://localhost:9091 | Scrapes each service's management port |
 | Jaeger | http://localhost:16686 | Distributed traces |
+| Swagger UI | http://localhost:8080/swagger-ui.html | Aggregated API docs for all services |
 
 Compose only contains the backing services for now. Application containers are added in the steps that
 implement them, so `docker compose up -d` always reaches a healthy state.

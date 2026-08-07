@@ -290,6 +290,52 @@ class ApiGatewayRoutingIT {
                 .doesNotContain("trace");
     }
 
+    // --- API documentation -----------------------------------------------------------------
+
+    @Test
+    @DisplayName("proxies a service's OpenAPI document and rewrites to the service's own path")
+    void proxiesServiceApiDocs() {
+        authService.stubFor(get(urlEqualTo("/v3/api-docs"))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("{\"openapi\":\"3.1.0\",\"info\":{\"title\":\"auth-service\"}}")));
+
+        webTestClient
+                .get()
+                .uri("/v3/api-docs/auth-service")
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectBody()
+                .jsonPath("$.info.title")
+                .isEqualTo("auth-service");
+
+        // The service is asked for its own document path, not the aggregated one.
+        authService.verify(getRequestedFor(urlEqualTo("/v3/api-docs")));
+    }
+
+    @Test
+    @DisplayName("serves the aggregated Swagger UI at the edge")
+    void servesAggregatedSwaggerUi() {
+        webTestClient.get().uri("/swagger-ui.html").exchange().expectStatus().value(status -> assertThat(status)
+                .isBetween(200, 399));
+
+        // The page's configuration lists every service, so a reader never needs an internal
+        // address to find an API.
+        webTestClient
+                .get()
+                .uri("/v3/api-docs/swagger-config")
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectBody()
+                .jsonPath("$.urls[?(@.name == 'auth-service')].url")
+                .isEqualTo("/v3/api-docs/auth-service")
+                .jsonPath("$.urls[?(@.name == 'wallet-service')].url")
+                .isEqualTo("/v3/api-docs/wallet-service");
+    }
+
     @Test
     @DisplayName("does not serve actuator on the public gateway port")
     void hidesActuatorFromThePublicPort() {

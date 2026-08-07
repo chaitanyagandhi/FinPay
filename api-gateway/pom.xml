@@ -30,6 +30,13 @@
       <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
     </dependency>
 
+    <!-- Aggregated API documentation: one Swagger page covering every service, served at the
+         same address clients already use. -->
+    <dependency>
+      <groupId>org.springdoc</groupId>
+      <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
+    </dependency>
+
     <!-- Stubs a downstream service so routing is tested against a real HTTP backend. -->
     <dependency>
       <groupId>org.wiremock</groupId>

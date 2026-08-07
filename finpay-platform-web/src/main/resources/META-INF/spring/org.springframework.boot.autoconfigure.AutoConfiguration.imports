@@ -1,1 +1,2 @@
 com.finpay.platform.web.autoconfigure.PlatformWebAutoConfiguration
+com.finpay.platform.web.autoconfigure.PlatformOpenApiAutoConfiguration

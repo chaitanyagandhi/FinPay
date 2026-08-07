@@ -62,6 +62,64 @@ spring:
               predicates:
                 - Path=/api/v1/admin/audit-events/**
 
+            # Each service's own OpenAPI document, proxied so the aggregated Swagger page
+            # can load them all from one origin without a CORS exemption.
+            - id: auth-service-docs
+              uri: lb://auth-service
+              predicates:
+                - Path=/v3/api-docs/auth-service
+              filters:
+                - RewritePath=/v3/api-docs/auth-service, /v3/api-docs
+
+            - id: user-service-docs
+              uri: lb://user-service
+              predicates:
+                - Path=/v3/api-docs/user-service
+              filters:
+                - RewritePath=/v3/api-docs/user-service, /v3/api-docs
+
+            - id: wallet-service-docs
+              uri: lb://wallet-service
+              predicates:
+                - Path=/v3/api-docs/wallet-service
+              filters:
+                - RewritePath=/v3/api-docs/wallet-service, /v3/api-docs
+
+            - id: transaction-service-docs
+              uri: lb://transaction-service
+              predicates:
+                - Path=/v3/api-docs/transaction-service
+              filters:
+                - RewritePath=/v3/api-docs/transaction-service, /v3/api-docs
+
+            - id: payment-service-docs
+              uri: lb://payment-service
+              predicates:
+                - Path=/v3/api-docs/payment-service
+              filters:
+                - RewritePath=/v3/api-docs/payment-service, /v3/api-docs
+
+            - id: fraud-service-docs
+              uri: lb://fraud-service
+              predicates:
+                - Path=/v3/api-docs/fraud-service
+              filters:
+                - RewritePath=/v3/api-docs/fraud-service, /v3/api-docs
+
+            - id: notification-service-docs
+              uri: lb://notification-service
+              predicates:
+                - Path=/v3/api-docs/notification-service
+              filters:
+                - RewritePath=/v3/api-docs/notification-service, /v3/api-docs
+
+            - id: audit-service-docs
+              uri: lb://audit-service
+              predicates:
+                - Path=/v3/api-docs/audit-service
+              filters:
+                - RewritePath=/v3/api-docs/audit-service, /v3/api-docs
+
 server:
   port: 8080
   shutdown: graceful
@@ -79,6 +137,33 @@ eureka:
     # Containers are addressed by IP inside the compose network; the container hostname is
     # not resolvable by other services.
     prefer-ip-address: true
+
+springdoc:
+  # api-docs stays enabled even though the gateway publishes no API of its own: the Swagger
+  # page loads its list of services from /v3/api-docs/swagger-config, which this serves.
+  # Disabling it removes that endpoint and the page comes up empty.
+  swagger-ui:
+    path: /swagger-ui.html
+    # One page listing every service. Each entry loads through the gateway, so the reader
+    # never needs a service's internal address.
+    urls:
+      - name: auth-service
+        url: /v3/api-docs/auth-service
+      - name: user-service
+        url: /v3/api-docs/user-service
+      - name: wallet-service
+        url: /v3/api-docs/wallet-service
+      - name: transaction-service
+        url: /v3/api-docs/transaction-service
+      - name: payment-service
+        url: /v3/api-docs/payment-service
+      - name: fraud-service
+        url: /v3/api-docs/fraud-service
+      - name: notification-service
+        url: /v3/api-docs/notification-service
+      - name: audit-service
+        url: /v3/api-docs/audit-service
+    urls-primary-name: auth-service
 
 management:
   # Actuator listens on its own port, which docker-compose deliberately does not publish.

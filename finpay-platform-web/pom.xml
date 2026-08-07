@@ -71,11 +71,28 @@
       <optional>true</optional>
     </dependency>
 
+    <!-- Optional so a service opts in to publishing an API description. The config server
+         and the registry expose framework endpoints rather than a FinPay API, and a Swagger
+         page describing nothing is worse than none. -->
+    <dependency>
+      <groupId>org.springdoc</groupId>
+      <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+      <optional>true</optional>
+    </dependency>
+    <dependency>
+      <groupId>org.springdoc</groupId>
+      <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
+      <optional>true</optional>
+    </dependency>
+
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-configuration-processor</artifactId>
       <optional>true</optional>
     </dependency>
+
+    <!-- Present at test scope so the generated document can be asserted against; optional
+         dependencies are on this module's own classpath already, this makes it explicit. -->
 
     <!-- StepVerifier, for asserting on the reactive filter. -->
     <dependency>

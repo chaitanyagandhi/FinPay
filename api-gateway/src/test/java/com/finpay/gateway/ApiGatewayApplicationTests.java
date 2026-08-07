@@ -28,27 +28,54 @@ class ApiGatewayApplicationTests {
     @Autowired
     private RouteLocator routeLocator;
 
+    /** Routes serving the public API. */
     private Map<String, Route> routesById;
+
+    /** Routes proxying each service's OpenAPI document, kept separate so each can be asserted. */
+    private Map<String, Route> documentationRoutesById;
 
     @BeforeEach
     void loadRoutes() {
-        routesById = routeLocator.getRoutes().collectList().block().stream()
-                .collect(Collectors.toMap(Route::getId, Function.identity()));
+        Map<Boolean, Map<String, Route>> byKind = routeLocator.getRoutes().collectList().block().stream()
+                .collect(Collectors.partitioningBy(
+                        route -> route.getId().endsWith("-docs"), Collectors.toMap(Route::getId, Function.identity())));
+
+        documentationRoutesById = byKind.get(true);
+        routesById = byKind.get(false);
     }
+
+    private static final List<String> DOMAIN_SERVICES = List.of(
+            "auth-service",
+            "user-service",
+            "wallet-service",
+            "transaction-service",
+            "payment-service",
+            "fraud-service",
+            "notification-service",
+            "audit-service");
 
     @Test
     @DisplayName("routes exactly the eight domain services and nothing else")
     void definesExpectedRoutes() {
-        assertThat(routesById.keySet())
-                .containsExactlyInAnyOrder(
-                        "auth-service",
-                        "user-service",
-                        "wallet-service",
-                        "transaction-service",
-                        "payment-service",
-                        "fraud-service",
-                        "notification-service",
-                        "audit-service");
+        assertThat(routesById.keySet()).containsExactlyInAnyOrderElementsOf(DOMAIN_SERVICES);
+    }
+
+    @Test
+    @DisplayName("proxies each service's OpenAPI document so one page can aggregate them")
+    void definesDocumentationRoutes() {
+        assertThat(documentationRoutesById.keySet())
+                .containsExactlyInAnyOrderElementsOf(DOMAIN_SERVICES.stream()
+                        .map(service -> service + "-docs")
+                        .toList());
+
+        // Each documentation route must reach the service it claims to describe, and must
+        // rewrite to that service's own /v3/api-docs path.
+        DOMAIN_SERVICES.forEach(service -> {
+            Route route = documentationRoutesById.get(service + "-docs");
+            assertThat(route.getUri().getScheme()).isEqualTo("lb");
+            assertThat(route.getUri().getHost()).isEqualTo(service);
+            assertThat(route.getPredicate().toString()).contains("/v3/api-docs/" + service);
+        });
     }
 
     @Test

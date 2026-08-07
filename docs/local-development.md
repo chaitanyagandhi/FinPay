@@ -427,6 +427,41 @@ annotated `@AutoConfigureObservability`; without it the Prometheus endpoint is s
 
 ---
 
+## API documentation
+
+One Swagger page at the edge covers every service: **http://localhost:8080/swagger-ui.html**
+
+The picker lists all eight domain services. Each entry loads through the gateway
+(`/v3/api-docs/<service>`), which proxies to that service's own `/v3/api-docs` — so a reader
+never needs a service's internal address, and the browser never makes a cross-origin request.
+
+**Until a service exists, its entry returns 503.** That is the same signal as an unavailable
+API route: the route is defined, no instance is registered.
+
+### What every service gets for free
+
+A service opts in by adding a springdoc starter. Everything below then comes from
+`finpay-platform-web` with no annotation in any controller:
+
+| Provided centrally | Why it is not left to each service |
+| ------------------ | ---------------------------------- |
+| `ApiError` schema | The published contract must match what the shared handler actually returns |
+| 400 / 401 / 403 / 404 / 500 responses on every operation | Documented once, so no endpoint quietly omits them or invents its own shape |
+| `bearerAuth` JWT security scheme | One way to authenticate, described identically everywhere |
+| Server URL = the gateway | A client calling a service directly bypasses routing, auth and rate limiting |
+
+An endpoint that documents a status itself keeps its own version — the shared defaults only
+fill gaps.
+
+Override per service with `finpay.openapi.*` (`title`, `description`, `version`, `public-url`),
+or set `finpay.openapi.enabled=false` to opt out.
+
+The config server and the registry deliberately publish **no** OpenAPI document. They expose
+framework endpoints rather than a FinPay API, and a Swagger page describing nothing is worse
+than none.
+
+---
+
 ### Container images
 
 All services share one parameterised build, `infrastructure/docker/service.Dockerfile`,
