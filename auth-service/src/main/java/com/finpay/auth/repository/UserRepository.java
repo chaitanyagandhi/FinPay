@@ -1,5 +1,6 @@
 package com.finpay.auth.repository;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -18,12 +19,31 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     Optional<User> findByEmail(String email);
 
     /**
-     * Counts one more consecutive failed sign-in against a user.
+     * Counts one more consecutive failed sign-in and locks the account if that was the last one
+     * allowed.
      *
-     * <p>A statement rather than a loaded entity, so it can be applied from a transaction that is
+     * <p>Counting and locking are one statement on purpose. Reading the count, deciding in Java,
+     * and writing the lock back would let several concurrent failures each read the same
+     * pre-threshold count and each decide not to lock - which is precisely the situation lockout
+     * exists to stop, since an attacker guessing in parallel is the one who produces it. The
+     * database evaluates the threshold against the value it is already updating.
+     *
+     * <p>A bulk statement rather than a loaded entity, so it can be applied from a transaction
      * independent of the one handling the request. See {@code LoginAttemptRecorder}.
+     *
+     * @param lockUntil when the lock should expire, applied only if the threshold is now reached
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("update User u set u.failedLoginAttempts = u.failedLoginAttempts + 1 where u.id = :userId")
-    int incrementFailedLoginAttempts(@Param("userId") UUID userId);
+    @Query(
+            """
+            update User u
+               set u.failedLoginAttempts = u.failedLoginAttempts + 1,
+                   u.lockedUntil = case
+                       when u.failedLoginAttempts + 1 >= :threshold then :lockUntil
+                       else u.lockedUntil
+                   end
+             where u.id = :userId
+            """)
+    int recordFailureAndLockIfNeeded(
+            @Param("userId") UUID userId, @Param("threshold") int threshold, @Param("lockUntil") Instant lockUntil);
 }

@@ -32,7 +32,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
             "eureka.client.enabled=false",
             // The test owns its configuration; reaching for a config server that is not
             // running would make the suite depend on the compose stack being up.
-            "spring.cloud.config.enabled=false"
+            "spring.cloud.config.enabled=false",
+            "finpay.auth.rate-limit.enabled=false"
         })
 @Testcontainers
 class AuthSchemaMigrationIT {

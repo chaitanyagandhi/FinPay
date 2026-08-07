@@ -304,12 +304,19 @@ services:
       # Startup is fail-fast against the config server, so it has to be answering first.
       config-server:
         condition: service_healthy
+      # Rate-limit counters live here. The limiter fails open if Redis is unreachable, so this is
+      # ordering for a clean start rather than a hard requirement to run.
+      redis:
+        condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: docker
       OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
       CONFIG_SERVER_URL: http://config-server:8888
       CONFIG_SERVER_USERNAME: ${CONFIG_SERVER_USERNAME:-finpay}
       CONFIG_SERVER_PASSWORD: ${CONFIG_SERVER_PASSWORD:-finpay}
+      # The address comes from the served application-docker.yml; only the secret is passed here,
+      # which is the placeholder the config server hands over unresolved.
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-finpay}
       # Its own database, as its own role: never the bootstrap superuser.
       DB_HOST: postgres
       DB_PORT: "5432"

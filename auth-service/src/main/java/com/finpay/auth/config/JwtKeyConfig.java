@@ -43,7 +43,12 @@ import com.nimbusds.jose.proc.SecurityContext;
  * discovered.
  */
 @Configuration
-@EnableConfigurationProperties({JwtProperties.class, RefreshTokenProperties.class})
+@EnableConfigurationProperties({
+    JwtProperties.class,
+    RefreshTokenProperties.class,
+    LockoutProperties.class,
+    RateLimitProperties.class
+})
 public class JwtKeyConfig {
 
     private static final Logger log = LoggerFactory.getLogger(JwtKeyConfig.class);

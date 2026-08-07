@@ -1,11 +1,13 @@
 package com.finpay.auth.service;
 
+import java.time.Instant;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.finpay.auth.config.LockoutProperties;
 import com.finpay.auth.dto.ClientContext;
 import com.finpay.auth.entity.LoginAttempt;
 import com.finpay.auth.entity.LoginFailureReason;
@@ -29,14 +31,22 @@ public class LoginAttemptRecorder {
 
     private final LoginAttemptRepository loginAttempts;
     private final UserRepository users;
+    private final LockoutProperties lockout;
 
-    public LoginAttemptRecorder(LoginAttemptRepository loginAttempts, UserRepository users) {
+    public LoginAttemptRecorder(LoginAttemptRepository loginAttempts, UserRepository users, LockoutProperties lockout) {
         this.loginAttempts = loginAttempts;
         this.users = users;
+        this.lockout = lockout;
     }
 
     /**
-     * Records a failed attempt and, when the account exists, counts the failure against it.
+     * Records a failed attempt and, when the account exists, counts the failure against it and
+     * locks the account once too many have accumulated.
+     *
+     * <p>The lock is applied here rather than in {@code LoginService} for the same reason the
+     * attempt is: it is a write on a path that ends by throwing. A lock set in the caller's
+     * transaction would be rolled back by the rejection that provoked it, and lockout would
+     * silently never engage no matter how many times an attacker guessed.
      *
      * @param userId null when no account matched the address
      */
@@ -44,11 +54,16 @@ public class LoginAttemptRecorder {
     public void recordFailure(UUID userId, String email, LoginFailureReason reason, ClientContext client) {
         loginAttempts.save(LoginAttempt.failure(userId, email, reason, client.ipAddress(), client.userAgent()));
 
-        if (userId != null) {
-            // Incremented with a statement rather than by mutating a loaded entity: the entity
-            // belongs to the transaction that is about to roll back, so its changes would be
-            // discarded along with everything else.
-            users.incrementFailedLoginAttempts(userId);
+        if (userId == null) {
+            // No account to count against. The attempt is still recorded above, because attempts
+            // on addresses that do not exist are the ones most worth noticing.
+            return;
         }
+
+        // Counted and locked with one statement rather than by mutating a loaded entity: the
+        // entity belongs to the transaction that is about to roll back, so its changes would be
+        // discarded along with everything else.
+        users.recordFailureAndLockIfNeeded(
+                userId, lockout.getMaxFailedAttempts(), Instant.now().plus(lockout.getDuration()));
     }
 }

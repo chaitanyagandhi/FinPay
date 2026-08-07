@@ -35,6 +35,15 @@ public enum PlatformErrorCode implements ErrorCode {
     /** The caller is authenticated but not allowed to perform this operation. */
     FORBIDDEN(HttpStatus.FORBIDDEN),
 
+    /**
+     * The caller has made too many requests and must slow down.
+     *
+     * <p>Protocol-level rather than domain-level: "you are going too fast" means the same thing
+     * whichever endpoint said it, and a client's reaction - back off and retry later - does not
+     * depend on what was being called. Responses carry {@code Retry-After}.
+     */
+    RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS),
+
     /** A downstream service could not be reached or had no available instance. */
     SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE),
 

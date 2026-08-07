@@ -4,7 +4,10 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.matching;
+import static com.github.tomakehurst.wiremock.client.WireMock.notContaining;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -369,6 +372,41 @@ class ApiGatewayRoutingIT {
                 .exchange()
                 .expectStatus()
                 .isNotFound();
+    }
+
+    @Test
+    @DisplayName("tells the downstream service where the caller actually came from")
+    void stampsTheClientAddress() {
+        authService.stubFor(
+                post(urlEqualTo("/api/v1/auth/login")).willReturn(aResponse().withStatus(200)));
+
+        webTestClient.post().uri("/api/v1/auth/login").exchange().expectStatus().isOk();
+
+        // Downstream cannot work this out for itself: the connection always comes from the
+        // gateway, so without this header every caller looks like the same client.
+        authService.verify(postRequestedFor(urlEqualTo("/api/v1/auth/login"))
+                .withHeader("X-Forwarded-For", matching("\\d{1,3}(\\.\\d{1,3}){3}|[0-9a-fA-F:]+")));
+    }
+
+    @Test
+    @DisplayName("discards a client-supplied X-Forwarded-For rather than trusting or appending to it")
+    void doesNotTrustAForgedClientAddress() {
+        authService.stubFor(
+                post(urlEqualTo("/api/v1/auth/login")).willReturn(aResponse().withStatus(200)));
+
+        webTestClient
+                .post()
+                .uri("/api/v1/auth/login")
+                .header("X-Forwarded-For", "203.0.113.99")
+                .exchange()
+                .expectStatus()
+                .isOk();
+
+        // If the forged value survived - first in the list, which is the entry downstream reads -
+        // a caller could mint a new address per request and take a fresh rate-limit allowance
+        // every time, which would defeat auth throttling entirely.
+        authService.verify(postRequestedFor(urlEqualTo("/api/v1/auth/login"))
+                .withHeader("X-Forwarded-For", notContaining("203.0.113.99")));
     }
 
     @Test

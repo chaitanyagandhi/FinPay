@@ -20,6 +20,15 @@ spring:
             # but duplicate headers are ambiguous and some clients read only one of them.
             - DedupeResponseHeader=X-Request-Id, RETAIN_FIRST
 
+          x-forwarded:
+            # Off deliberately. ClientAddressFilter sets X-Forwarded-For instead, because this
+            # gateway is the edge and must overwrite whatever a client claims about itself
+            # rather than append to it. The built-in filter is for the opposite topology - a
+            # gateway behind proxies it should believe - and only registers at all when
+            # trusted-proxies is set. Turning this on would leave a forged entry first, which is
+            # the entry downstream services read.
+            enabled: false
+
           httpclient:
             # A downstream that never answers must not hold a gateway connection open
             # indefinitely. Resilience4j adds per-route circuit breaking and bulkheads later;

@@ -22,6 +22,7 @@ import com.finpay.auth.service.LoginService;
 import com.finpay.auth.service.LogoutService;
 import com.finpay.auth.service.RefreshTokenService;
 import com.finpay.auth.service.RegistrationService;
+import com.finpay.auth.web.ClientRequests;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -41,13 +42,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RequestMapping("/api/v1/auth")
 @Tag(name = "Authentication", description = "Registration, sign-in and token lifecycle")
 public class AuthController {
-
-    /**
-     * Set by the gateway, which is the only thing that should be reaching this service. The value
-     * originates with the caller and is trustworthy only because everything in front of it is
-     * ours; it is recorded for the audit trail and never used to authorise anything.
-     */
-    private static final String FORWARDED_FOR = "X-Forwarded-For";
 
     /** The scheme prefix on an {@code Authorization} header carrying an access token. */
     private static final String BEARER_PREFIX = "Bearer ";
@@ -146,15 +140,10 @@ public class AuthController {
     /**
      * Where the request appeared to come from.
      *
-     * <p>Behind the gateway the socket address is always the gateway's, so the forwarded header is
-     * the only thing carrying the caller's address. Only the first entry is taken: the rest are
-     * proxies, and the whole header is client-settable on a direct connection.
+     * <p>Resolved by {@link ClientRequests}, which the rate limiter also uses, so the party being
+     * throttled and the party recorded in the attempt history are always the same one.
      */
     private ClientContext clientContextOf(HttpServletRequest request) {
-        String forwarded = request.getHeader(FORWARDED_FOR);
-        String ipAddress =
-                forwarded != null && !forwarded.isBlank() ? forwarded.split(",")[0].trim() : request.getRemoteAddr();
-
-        return new ClientContext(ipAddress, request.getHeader("User-Agent"));
+        return ClientRequests.contextOf(request);
     }
 }

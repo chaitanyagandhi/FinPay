@@ -43,6 +43,9 @@ import com.finpay.platform.web.error.ApiError;
             "finpay.auth.password.bcrypt-strength=4",
             "eureka.client.enabled=false",
             "spring.cloud.config.enabled=false",
+            // This suite is not about throttling, and switching the limiter off keeps it
+            // from needing a Redis container. AuthRateLimitIT covers the limiter itself.
+            "finpay.auth.rate-limit.enabled=false",
             "management.server.port=" + LogoutIT.MANAGEMENT_PORT
         })
 @Testcontainers

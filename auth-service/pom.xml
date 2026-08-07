@@ -73,6 +73,14 @@
       <artifactId>spring-cloud-starter-config</artifactId>
     </dependency>
 
+    <!-- Rate-limit counters. Redis rather than memory because the counter has to be shared: a
+         per-instance counter multiplies the effective limit by the number of replicas, and a
+         caller who reconnects lands on a different instance with a fresh allowance. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-redis</artifactId>
+    </dependency>
+
     <dependency>
       <groupId>org.springdoc</groupId>
       <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
