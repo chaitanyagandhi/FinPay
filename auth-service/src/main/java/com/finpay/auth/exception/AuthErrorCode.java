@@ -20,7 +20,16 @@ public enum AuthErrorCode implements ErrorCode {
      *
      * <p>409 rather than 400: the request was well formed, it conflicts with existing state.
      */
-    EMAIL_ALREADY_REGISTERED(HttpStatus.CONFLICT);
+    EMAIL_ALREADY_REGISTERED(HttpStatus.CONFLICT),
+
+    /**
+     * Sign-in failed.
+     *
+     * <p>One code covers a missing account, a wrong password, a locked account and a disabled one.
+     * A client cannot tell which, and that is the point: separate codes would turn this endpoint
+     * into a way of discovering which addresses have accounts.
+     */
+    INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED);
 
     private final HttpStatus httpStatus;
 

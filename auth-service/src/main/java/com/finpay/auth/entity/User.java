@@ -120,6 +120,35 @@ public class User {
         return new User(UUID.randomUUID(), normalisedEmail, UserStatus.PENDING_VERIFICATION, EnumSet.of(Role.USER));
     }
 
+    /**
+     * Counts a failed sign-in.
+     *
+     * <p>Kept on the row rather than derived from the attempt history, because the check runs on
+     * the sign-in hot path and must not depend on scanning an append-only table. The threshold
+     * that turns this into a lock is applied in the step that adds lockout.
+     */
+    public void recordFailedLogin() {
+        this.failedLoginAttempts++;
+    }
+
+    /**
+     * Clears the failure count and records when the user signed in.
+     *
+     * <p>Resetting on success is what makes the counter mean "consecutive failures" rather than
+     * "failures ever", so an account is not eventually locked out by ordinary typos spread over
+     * months.
+     */
+    public void recordSuccessfulLogin(Instant at) {
+        this.failedLoginAttempts = 0;
+        this.lockedUntil = null;
+        this.lastLoginAt = at;
+    }
+
+    /** Whether a temporary lock is still in force at the given instant. */
+    public boolean isCurrentlyLockedOut(Instant at) {
+        return lockedUntil != null && lockedUntil.isAfter(at);
+    }
+
     public UUID getId() {
         return id;
     }

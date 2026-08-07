@@ -1,5 +1,6 @@
 package com.finpay.auth.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 
 import org.springframework.http.ResponseEntity;
@@ -9,8 +10,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import com.finpay.auth.dto.ClientContext;
+import com.finpay.auth.dto.LoginRequest;
+import com.finpay.auth.dto.LoginResponse;
 import com.finpay.auth.dto.RegistrationRequest;
 import com.finpay.auth.dto.RegistrationResponse;
+import com.finpay.auth.service.LoginService;
 import com.finpay.auth.service.RegistrationService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -32,10 +37,19 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @Tag(name = "Authentication", description = "Registration, sign-in and token lifecycle")
 public class AuthController {
 
-    private final RegistrationService registrationService;
+    /**
+     * Set by the gateway, which is the only thing that should be reaching this service. The value
+     * originates with the caller and is trustworthy only because everything in front of it is
+     * ours; it is recorded for the audit trail and never used to authorise anything.
+     */
+    private static final String FORWARDED_FOR = "X-Forwarded-For";
 
-    public AuthController(RegistrationService registrationService) {
+    private final RegistrationService registrationService;
+    private final LoginService loginService;
+
+    public AuthController(RegistrationService registrationService, LoginService loginService) {
         this.registrationService = registrationService;
+        this.loginService = loginService;
     }
 
     @PostMapping("/register")
@@ -54,5 +68,32 @@ public class AuthController {
         return ResponseEntity.created(
                         UriComponentsBuilder.fromPath("/api/v1/users/{id}").build(response.userId()))
                 .body(response);
+    }
+
+    @PostMapping("/login")
+    @Operation(
+            summary = "Sign in",
+            description =
+                    """
+                    Verifies the credentials and returns a short-lived access token. Every failure -                     unknown address, wrong password, locked or disabled account - returns the same                     401 with the same message, so this endpoint cannot be used to discover which                     addresses have accounts.""")
+    @ApiResponse(responseCode = "200", description = "Signed in; an access token is returned.")
+    @ApiResponse(responseCode = "401", description = "The credentials were not accepted.")
+    public LoginResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+        return loginService.login(request, clientContextOf(httpRequest));
+    }
+
+    /**
+     * Where the request appeared to come from.
+     *
+     * <p>Behind the gateway the socket address is always the gateway's, so the forwarded header is
+     * the only thing carrying the caller's address. Only the first entry is taken: the rest are
+     * proxies, and the whole header is client-settable on a direct connection.
+     */
+    private ClientContext clientContextOf(HttpServletRequest request) {
+        String forwarded = request.getHeader(FORWARDED_FOR);
+        String ipAddress =
+                forwarded != null && !forwarded.isBlank() ? forwarded.split(",")[0].trim() : request.getRemoteAddr();
+
+        return new ClientContext(ipAddress, request.getHeader("User-Agent"));
     }
 }
