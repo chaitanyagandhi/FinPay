@@ -25,6 +25,7 @@ volumes:
   postgres-data:
   redis-data:
   kafka-data:
+  prometheus-data:
 
 services:
   postgres:
@@ -188,6 +189,7 @@ services:
     environment:
       # "docker" selects the in-network addresses the server hands to its clients.
       SPRING_PROFILES_ACTIVE: docker
+      OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
       CONFIG_SERVER_USERNAME: ${CONFIG_SERVER_USERNAME:-finpay}
       CONFIG_SERVER_PASSWORD: ${CONFIG_SERVER_PASSWORD:-finpay}
       TZ: UTC
@@ -195,7 +197,7 @@ services:
       - "${CONFIG_SERVER_PORT:-8888}:8888"
     healthcheck:
       # Health is deliberately unauthenticated so this check needs no credentials.
-      test: ["CMD-SHELL", "wget -q -O - http://localhost:8888/actuator/health | grep -q '\"status\":\"UP\"'"]
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:9090/actuator/health | grep -q '\"status\":\"UP\"'"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -222,6 +224,7 @@ services:
       # The registry advertises this hostname to clients, so it has to be the name other
       # containers resolve rather than the container's own id.
       SPRING_PROFILES_ACTIVE: docker
+      OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
       EUREKA_HOSTNAME: service-registry
       EUREKA_USERNAME: ${EUREKA_USERNAME:-finpay}
       EUREKA_PASSWORD: ${EUREKA_PASSWORD:-finpay}
@@ -232,7 +235,7 @@ services:
     ports:
       - "${EUREKA_PORT:-8761}:8761"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://localhost:8761/actuator/health | grep -q '\"status\":\"UP\"'"]
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:9090/actuator/health | grep -q '\"status\":\"UP\"'"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -260,6 +263,7 @@ services:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
       EUREKA_HOST: service-registry
       EUREKA_PORT: "8761"
       EUREKA_USERNAME: ${EUREKA_USERNAME:-finpay}
@@ -269,7 +273,7 @@ services:
     ports:
       - "${GATEWAY_PORT:-8080}:8080"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:9090/actuator/health | grep -q '\"status\":\"UP\"'"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -281,3 +285,59 @@ services:
         limits:
           cpus: "1.0"
           memory: 512m
+
+  # --- Monitoring -------------------------------------------------------------------------
+
+  prometheus:
+    image: prom/prometheus:v3.13.2
+    container_name: finpay-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+    volumes:
+      - ./infrastructure/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9091}:9090"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:9090/-/healthy | grep -q Healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - finpay
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512m
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.76.0
+    container_name: finpay-jaeger
+    restart: unless-stopped
+    environment:
+      # Accept OpenTelemetry protocol directly, so services export OTLP and nothing has to
+      # speak a Jaeger-specific wire format.
+      COLLECTOR_OTLP_ENABLED: "true"
+      # Traces live in memory: this is a development aid, not a system of record.
+      SPAN_STORAGE_TYPE: memory
+      MEMORY_MAX_TRACES: "50000"
+    ports:
+      - "${JAEGER_UI_PORT:-16686}:16686"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:16686/ > /dev/null 2>&1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - finpay
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 768m

@@ -32,8 +32,10 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(requests -> requests
-                        // Liveness and readiness must answer before any credential is available:
-                        // the container healthcheck and Kubernetes probes call them unauthenticated.
+                        // Actuator binds its own port (management.server.port), which compose
+                        // never publishes. Health and info are permitted so container healthchecks
+                        // and Kubernetes probes work without credentials; metrics and everything
+                        // else still require them, and Prometheus scrapes with credentials.
                         .requestMatchers(EndpointRequest.to("health", "info"))
                         .permitAll()
                         .anyRequest()

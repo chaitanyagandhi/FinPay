@@ -115,6 +115,9 @@ mistake shows up in your shell rather than at runtime.
 | Config server | http://localhost:8888 | `config-server:8888` |
 | Service registry | http://localhost:8761 | `service-registry:8761` |
 | API gateway | http://localhost:8080 | `api-gateway:8080` |
+| Prometheus | http://localhost:9091 | `prometheus:9090` |
+| Jaeger | http://localhost:16686 | `jaeger:16686` |
+| Service management ports | *not published* | `<service>:9090` |
 
 Kafka advertises two listeners. Use `localhost:29092` from your IDE, tests and host
 processes; containers use `kafka:9092`. Mixing them up produces a connection that succeeds
@@ -366,6 +369,61 @@ docker compose logs config-server --tail=5
 
 Running locally the human-readable format is kept — JSON is for log collectors, not for a
 developer reading a terminal. The switch is the `docker` profile, so it needs no code change.
+
+---
+
+## Observability
+
+### Actuator is on a port you cannot reach from outside
+
+Every service binds actuator to port **9090**, and `docker-compose.yml` deliberately does not
+publish it. Metrics, health detail and gateway route topology are operator surface, so they
+are isolated by port rather than by a path rule or a shared credential:
+
+```bash
+curl -i http://localhost:8080/actuator/prometheus   # 404 - not served on the public port
+docker compose exec api-gateway wget -qO- http://localhost:9090/actuator/health
+```
+
+Exposed endpoints are `health`, `info`, `metrics` and `prometheus` — nothing else. `env` and
+`beans` return 404 even on the management port, because they would dump resolved configuration.
+
+On the config server and the registry, `health` is anonymous so container healthchecks and
+Kubernetes probes work without secrets; metrics require credentials, which is why the scrape
+config carries them.
+
+### Metrics
+
+Prometheus scrapes all three services every 15s and is browsable at http://localhost:9091.
+
+```bash
+curl 'http://localhost:9091/api/v1/targets?state=active'
+curl 'http://localhost:9091/api/v1/query?query=jvm_memory_used_bytes'
+```
+
+Every metric is tagged `application=<service name>`, so one query can compare services.
+Targets are listed explicitly rather than discovered through Eureka: with discovery, a service
+that was never deployed looks identical to one that has died, and that is precisely the case
+an operator needs to notice.
+
+### Tracing
+
+Services export OpenTelemetry spans over OTLP to Jaeger, browsable at http://localhost:16686.
+
+```bash
+curl http://localhost:8080/api/v1/wallets/me      # generate a trace
+curl -s http://localhost:16686/api/services       # then look for it
+```
+
+The code uses Micrometer's vendor-neutral observation API bridged onto OpenTelemetry, so
+swapping Jaeger for Tempo or any other OTLP backend is a configuration change.
+
+Sampling is 100% locally, where volume is low and a missing trace costs an afternoon.
+`TRACING_SAMPLE_PROBABILITY` lowers it. Jaeger stores traces in memory here — it is a
+development aid, not a system of record, so a restart discards them.
+
+Note that inside `@SpringBootTest`, Spring Boot switches metrics export off unless a test is
+annotated `@AutoConfigureObservability`; without it the Prometheus endpoint is simply absent.
 
 ---
 

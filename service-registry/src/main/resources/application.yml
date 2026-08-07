@@ -38,15 +38,42 @@ eureka:
     response-cache-update-interval-ms: 5000
 
 management:
+  # Actuator listens on its own port, which docker-compose deliberately does not publish.
+  # Metrics, health detail and route topology are operator surface, not public API; keeping
+  # them off the port clients can reach is stronger than relying on a path rule or a
+  # credential. Prometheus scrapes it from inside the network.
+  server:
+    port: ${MANAGEMENT_PORT:9090}
+
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics,prometheus
+
   endpoint:
     health:
       probes:
         enabled: true
-      show-details: when-authorized
+      # Safe because the port is unreachable from outside the network.
+      show-details: always
+
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+  observations:
+    key-values:
+      application: ${spring.application.name}
+
+  tracing:
+    sampling:
+      # Every request is sampled locally, where volume is low and a missing trace is the
+      # thing that wastes an afternoon. A production deployment lowers this.
+      probability: ${TRACING_SAMPLE_PROBABILITY:1.0}
+
+  otlp:
+    tracing:
+      endpoint: ${OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
 
 logging:
   level:

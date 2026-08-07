@@ -167,6 +167,8 @@ Present:
   with service-internal paths refused at the edge
 - **Cross-cutting web layer** — request ids propagated end to end, a single error envelope, and
   structured JSON logging in containers
+- **Observability** — Actuator on an unpublished management port, Prometheus scraping every service,
+  and distributed tracing exported over OTLP to Jaeger
 
 **Not yet present:** database schemas, business logic, HTTP APIs, the frontend, and CI. The gateway is
 the only service registered with Eureka so far; routes resolve to nothing and return 503 until the
@@ -233,6 +235,8 @@ make db       # psql into a service database as its own role
 | Config server | http://localhost:8888 | HTTP Basic; `/actuator/health` is anonymous |
 | Eureka dashboard | http://localhost:8761 | HTTP Basic; `/actuator/health` is anonymous |
 | API gateway | http://localhost:8080 | The only application port clients use |
+| Prometheus | http://localhost:9091 | Scrapes each service's management port |
+| Jaeger | http://localhost:16686 | Distributed traces |
 
 Compose only contains the backing services for now. Application containers are added in the steps that
 implement them, so `docker compose up -d` always reaches a healthy state.

@@ -15,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -40,9 +41,16 @@ import com.finpay.platform.web.RequestCorrelation;
             // Eureka is replaced by the static discovery client below; the gateway must not try
             // to reach a registry that is not running.
             "eureka.client.enabled=false",
-            "spring.cloud.discovery.client.simple.instances.auth-service[0].uri=http://localhost:${wiremock.port}"
+            "spring.cloud.discovery.client.simple.instances.auth-service[0].uri=http://localhost:${wiremock.port}",
+            "management.server.port=" + ApiGatewayRoutingIT.MANAGEMENT_PORT,
         })
+// Spring Boot switches metrics export off inside @SpringBootTest; without this the
+// Prometheus endpoint is simply not registered. Tracing stays off: no collector runs here.
+@AutoConfigureObservability(tracing = false)
 class ApiGatewayRoutingIT {
+
+    /** Fixed so the test knows where actuator is; modules build sequentially. */
+    static final String MANAGEMENT_PORT = "19193";
 
     private static WireMockServer authService;
 
@@ -283,16 +291,45 @@ class ApiGatewayRoutingIT {
     }
 
     @Test
-    @DisplayName("serves its own health check without routing it")
-    void servesHealthLocally() {
+    @DisplayName("does not serve actuator on the public gateway port")
+    void hidesActuatorFromThePublicPort() {
+        // The gateway is the one port the outside world can reach. Actuator lists routes,
+        // targets and metrics, so it lives on the unpublished management port instead.
+        webTestClient.get().uri("/actuator/health").exchange().expectStatus().isNotFound();
         webTestClient
                 .get()
-                .uri("/actuator/health")
+                .uri("/actuator/prometheus")
                 .exchange()
                 .expectStatus()
-                .isOk()
-                .expectBody()
-                .jsonPath("$.status")
-                .isEqualTo("UP");
+                .isNotFound();
+    }
+
+    @Test
+    @DisplayName("serves health and metrics on the management port")
+    void servesActuatorOnManagementPort() {
+        assertThat(management("/actuator/health")).contains("\"status\":\"UP\"");
+        assertThat(management("/actuator/health/liveness")).contains("UP");
+        assertThat(management("/actuator/health/readiness")).contains("UP");
+        assertThat(management("/actuator/prometheus"))
+                .contains("jvm_memory_used_bytes")
+                .contains("application=\"api-gateway\"");
+    }
+
+    private String management(String path) {
+        org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+        // The scrape endpoint produces text/plain; actuator answers an unmatched "produces"
+        // with 404 rather than 406, so the accepted types are stated explicitly.
+        headers.setAccept(java.util.List.of(
+                org.springframework.http.MediaType.TEXT_PLAIN,
+                org.springframework.http.MediaType.APPLICATION_JSON,
+                org.springframework.http.MediaType.ALL));
+
+        return new org.springframework.boot.test.web.client.TestRestTemplate()
+                .exchange(
+                        "http://localhost:" + MANAGEMENT_PORT + path,
+                        org.springframework.http.HttpMethod.GET,
+                        new org.springframework.http.HttpEntity<>(headers),
+                        String.class)
+                .getBody();
     }
 }

@@ -1,0 +1,49 @@
+# Prometheus scrape configuration for local development.
+#
+# Every target is scraped on its management port (9090), which docker-compose does not publish
+# to the host. Metrics therefore never leave the compose network.
+#
+# Services are listed explicitly rather than discovered. Eureka service discovery would work,
+# but a target list that changes with deployment makes a missing service look identical to a
+# service that was never deployed, and that is exactly the case an operator needs to spot.
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  external_labels:
+    environment: local
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # The config server and the registry authenticate every request that is not a health probe,
+  # so the scraper carries credentials. These are local development defaults.
+  - job_name: config-server
+    metrics_path: /actuator/prometheus
+    basic_auth:
+      username: finpay
+      password: finpay
+    static_configs:
+      - targets: ["config-server:9090"]
+        labels:
+          service: config-server
+
+  - job_name: service-registry
+    metrics_path: /actuator/prometheus
+    basic_auth:
+      username: finpay
+      password: finpay
+    static_configs:
+      - targets: ["service-registry:9090"]
+        labels:
+          service: service-registry
+
+  # The gateway has no authentication yet; its management port is unpublished all the same.
+  - job_name: api-gateway
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["api-gateway:9090"]
+        labels:
+          service: api-gateway

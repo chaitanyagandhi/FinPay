@@ -13,15 +13,38 @@
   <artifactId>finpay-platform-web</artifactId>
   <name>finpay-platform-web</name>
   <description>
-    Cross-cutting HTTP contracts shared by FinPay services: request-id propagation, the error
-    response envelope, and structured logging support. Contains no business logic and no domain
-    types by design.
+    Cross-cutting platform concerns shared by FinPay services: request-id propagation, the error
+    response envelope, structured logging, and the observability stack (Actuator, Prometheus
+    metrics, distributed tracing). Contains no business logic and no domain types by design.
   </description>
 
   <dependencies>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter</artifactId>
+    </dependency>
+
+    <!-- Observability is not optional for a service that moves money: an operator has to be
+         able to see its health, its rates, and where a request spent its time. Declaring it
+         here means every service is observable by construction rather than by remembering. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-registry-prometheus</artifactId>
+    </dependency>
+    <!-- Micrometer's observation API bridged onto OpenTelemetry, exported over OTLP. Keeping
+         the vendor-neutral API in the code means swapping the backend is a configuration
+         change, not a rewrite. -->
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-tracing-bridge-otel</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-exporter-otlp</artifactId>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>

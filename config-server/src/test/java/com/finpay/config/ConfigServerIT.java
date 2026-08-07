@@ -2,17 +2,23 @@ package com.finpay.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.cloud.config.environment.Environment;
 import org.springframework.cloud.config.environment.PropertySource;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
 /**
@@ -23,9 +29,18 @@ import org.springframework.http.ResponseEntity;
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
             "spring.security.user.name=" + ConfigServerIT.USERNAME,
-            "spring.security.user.password=" + ConfigServerIT.PASSWORD
+            "spring.security.user.password=" + ConfigServerIT.PASSWORD,
+            // Actuator binds its own random port here, mirroring the production split.
+            "management.server.port=" + ConfigServerIT.MANAGEMENT_PORT,
+            // No collector is running during tests.
         })
+// Spring Boot switches metrics export off inside @SpringBootTest; without this the
+// Prometheus endpoint is simply not registered. Tracing stays off: no collector runs here.
+@AutoConfigureObservability(tracing = false)
 class ConfigServerIT {
+
+    /** Fixed so the test knows where actuator is; modules build sequentially. */
+    static final String MANAGEMENT_PORT = "19191";
 
     static final String USERNAME = "test-client";
     static final String PASSWORD = "test-secret";
@@ -101,20 +116,75 @@ class ConfigServerIT {
     }
 
     @Test
-    @DisplayName("exposes health without authentication for container and probe checks")
-    void exposesHealthAnonymously() {
-        ResponseEntity<String> response = restTemplate.getForEntity("/actuator/health", String.class);
+    @DisplayName("does not serve actuator on the port clients reach")
+    void hidesActuatorFromThePublicPort() {
+        // Management endpoints live on their own port, which is never published. Reaching them
+        // through the port that serves configuration would defeat that.
+        //
+        // Note this server maps /{application}/{profile}, so a path like /actuator/health on
+        // this port is a configuration lookup for an application named "actuator" rather than
+        // the actuator endpoint. Metrics are the unambiguous check.
+        assertThat(restTemplate
+                        .getForEntity("/actuator/prometheus", String.class)
+                        .getStatusCode())
+                .isNotEqualTo(HttpStatus.OK);
+        assertThat(restTemplate.getForEntity("/actuator/metrics", String.class).getStatusCode())
+                .isNotEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    @DisplayName("serves health on the management port for container and probe checks")
+    void servesHealthOnManagementPort() {
+        ResponseEntity<String> response = management("/actuator/health");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).contains("\"status\":\"UP\"");
     }
 
     @Test
-    @DisplayName("does not expose other actuator endpoints anonymously")
-    void hidesOtherActuatorEndpoints() {
-        ResponseEntity<String> response = restTemplate.getForEntity("/actuator/env", String.class);
+    @DisplayName("serves liveness and readiness probes")
+    void servesProbes() {
+        assertThat(management("/actuator/health/liveness").getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(management("/actuator/health/readiness").getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
 
-        assertThat(response.getStatusCode()).isNotEqualTo(HttpStatus.OK);
+    @Test
+    @DisplayName("serves Prometheus metrics to an authenticated scraper")
+    void servesPrometheusMetrics() {
+        // The scrape endpoint produces text/plain. RestTemplate would otherwise ask for JSON,
+        // and actuator answers an unmatched "produces" with 404 rather than 406.
+        HttpHeaders headers = new HttpHeaders();
+        headers.setAccept(List.of(MediaType.TEXT_PLAIN, MediaType.ALL));
+
+        ResponseEntity<String> response = new TestRestTemplate(USERNAME, PASSWORD)
+                .exchange(
+                        "http://localhost:" + MANAGEMENT_PORT + "/actuator/prometheus",
+                        HttpMethod.GET,
+                        new HttpEntity<>(headers),
+                        String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).contains("jvm_memory_used_bytes").contains("application=\"config-server\"");
+    }
+
+    @Test
+    @DisplayName("keeps metrics behind credentials while leaving probes open")
+    void metricsRequireCredentialsButProbesDoNot() {
+        assertThat(management("/actuator/prometheus").getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(management("/actuator/health").getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    @DisplayName("exposes no actuator endpoint that was not asked for")
+    void exposesOnlyTheRequestedEndpoints() {
+        // /actuator/env would dump resolved configuration, including any secret placeholders
+        // that had been resolved.
+        assertThat(management("/actuator/env").getStatusCode()).isNotEqualTo(HttpStatus.OK);
+        assertThat(management("/actuator/beans").getStatusCode()).isNotEqualTo(HttpStatus.OK);
+    }
+
+    private ResponseEntity<String> management(String path) {
+        return new TestRestTemplate().getForEntity("http://localhost:" + MANAGEMENT_PORT + path, String.class);
     }
 
     private Environment fetch(String path) {
