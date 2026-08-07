@@ -2,5 +2,55 @@ spring:
   application:
     name: auth-service
 
+  datasource:
+    # Each service connects as its own role to its own database. Using the bootstrap
+    # superuser here would silently defeat the database-per-service isolation that
+    # infrastructure/docker/postgres/initdb enforces.
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:finpay_auth}
+    username: ${DB_USERNAME:finpay_auth}
+    password: ${DB_PASSWORD:finpay}
+    hikari:
+      pool-name: auth-service-pool
+      maximum-pool-size: ${DB_POOL_MAX:10}
+      minimum-idle: 2
+      connection-timeout: 3000
+      # A leaked connection should surface as a log entry rather than as a pool that
+      # slowly empties until the service stops answering.
+      leak-detection-threshold: 30000
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # The schema is created by migrations from empty, so there is no legacy state to
+    # baseline over. Turning this on would let a mismatched database start up quietly.
+    baseline-on-migrate: false
+    # Refuse to start if an applied migration's checksum no longer matches the file: an
+    # edited migration means the running schema is not the one in source control.
+    validate-on-migrate: true
+    # Migrations run as the service's own role, which owns its schema.
+    clean-disabled: true
+
 server:
   port: 8081
+  shutdown: graceful
+  error:
+    include-stacktrace: never
+    include-message: never
+
+logging:
+  level:
+    root: INFO
+
+---
+# Containers log structured JSON so a collector can index each field, including the request id
+# that ties a call together. Running locally the default human-readable format is kept: JSON is
+# for machines, and a developer reading a terminal is not one.
+spring:
+  config:
+    activate:
+      on-profile: docker
+
+logging:
+  structured:
+    format:
+      console: ecs

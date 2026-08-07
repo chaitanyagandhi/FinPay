@@ -14,12 +14,35 @@ How to build FinPay and run its supporting infrastructure on your own machine.
 | Tool | Version | Needed for |
 | ---- | ------- | ---------- |
 | JDK | **21.x exactly** | The build enforces `[21,22)` and fails on any other major version |
-| Docker Desktop | 4.x with Compose v2 | Backing services |
+| Docker Desktop | **4.44.x (Docker Engine 28.x)** | Backing services and Testcontainers — see below |
 | Make | any | The command shortcuts below (optional but assumed here) |
 | Node.js | 20+ | Frontend only, from Phase 7 |
 
 Maven itself is not required — the repository ships a script-only Maven wrapper (`./mvnw`)
 pinned to 3.9.16, which downloads the right Maven on first use.
+
+### Docker Engine must be 28.x, not 29.x
+
+Integration tests use Testcontainers, which hardcodes Docker API version **1.32** in its
+client. Docker Engine 29 raised its minimum accepted API version to **1.44** and rejects
+anything older with `400 Bad Request`. Testcontainers reports that as
+`Could not find a valid Docker environment` — which reads like a misconfigured machine but
+is purely a version mismatch: the `docker` CLI keeps working perfectly throughout.
+
+Nothing configurable works around it. `DOCKER_HOST`, `DOCKER_API_VERSION`, the raw engine
+socket and a `testcontainers.properties` override were all tried; Testcontainers pins 1.32
+internally. Testcontainers 1.21.3, the newest release, still bundles the affected
+docker-java 3.4.2.
+
+Until Testcontainers ships a fix, stay on Docker Desktop **4.44.1** (Engine 28.3.2) and turn
+off automatic updates, or every integration test in the project stops running:
+
+```bash
+docker version --format 'engine={{.Server.Version}} minAPI={{.Server.MinAPIVersion}}'
+# want: engine=28.x
+```
+
+Downgrading is safe: named volumes and built images survive.
 
 ### Installing JDK 21
 
