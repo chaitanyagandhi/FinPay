@@ -47,3 +47,11 @@ scrape_configs:
       - targets: ["api-gateway:9090"]
         labels:
           service: api-gateway
+
+  # Domain services have no authentication on their management port yet.
+  - job_name: auth-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["auth-service:9090"]
+        labels:
+          service: auth-service

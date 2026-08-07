@@ -20,11 +20,40 @@
       <artifactId>spring-boot-starter</artifactId>
     </dependency>
 
-    <!-- Schema only at this step: a DataSource for Flyway to migrate. JPA arrives with the
-         first entity, in the step that implements registration. -->
+    <dependency>
+      <groupId>com.finpay</groupId>
+      <artifactId>finpay-platform-web</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+
     <dependency>
       <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter-jdbc</artifactId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-jpa</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <!-- BCrypt only. The full security starter would install a filter chain that locks down
+         every endpoint with a generated password, which is wrong for a service whose only
+         endpoint so far must be public. Authentication arrives with tokens in the next step. -->
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-crypto</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.cloud</groupId>
+      <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springdoc</groupId>
+      <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
     </dependency>
     <dependency>
       <groupId>org.flywaydb</groupId>

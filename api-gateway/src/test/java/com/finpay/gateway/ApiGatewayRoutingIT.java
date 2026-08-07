@@ -210,6 +210,27 @@ class ApiGatewayRoutingIT {
     }
 
     @Test
+    @DisplayName("returns the request id exactly once, not once per hop")
+    void returnsRequestIdOnlyOnce() {
+        authService.stubFor(get(urlPathEqualTo("/api/v1/auth/sessions"))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        // A downstream service stamps its own response, exactly as the shared
+                        // servlet filter does in a real service.
+                        .withHeader(RequestCorrelation.REQUEST_ID_HEADER, "from-downstream")));
+
+        webTestClient
+                .get()
+                .uri("/api/v1/auth/sessions")
+                .header(RequestCorrelation.REQUEST_ID_HEADER, "req-once")
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectHeader()
+                .valueEquals(RequestCorrelation.REQUEST_ID_HEADER, "req-once");
+    }
+
+    @Test
     @DisplayName("adopts a caller-supplied request id and forwards that one")
     void adoptsAndForwardsInboundRequestId() {
         authService.stubFor(get(urlPathEqualTo("/api/v1/auth/sessions"))
