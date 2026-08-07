@@ -27,7 +27,13 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * refresh token that expires before it was issued. A migration that creates tables but forgets a
  * constraint looks identical to a correct one until the day it matters.
  */
-@SpringBootTest
+@SpringBootTest(
+        properties = {
+            "eureka.client.enabled=false",
+            // The test owns its configuration; reaching for a config server that is not
+            // running would make the suite depend on the compose stack being up.
+            "spring.cloud.config.enabled=false"
+        })
 @Testcontainers
 class AuthSchemaMigrationIT {
 

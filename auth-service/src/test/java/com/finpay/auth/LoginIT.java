@@ -39,6 +39,9 @@ import com.finpay.platform.web.error.ApiError;
         properties = {
             "finpay.auth.password.bcrypt-strength=4",
             "eureka.client.enabled=false",
+            // The test owns its configuration; reaching for a config server that is not
+            // running would make the suite depend on the compose stack being up.
+            "spring.cloud.config.enabled=false",
             "management.server.port=" + LoginIT.MANAGEMENT_PORT
         })
 @Testcontainers

@@ -58,6 +58,21 @@
       <groupId>org.springframework.cloud</groupId>
       <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
     </dependency>
+    <!-- Shared platform defaults - serialization of money and time, error rendering, log
+         format - come from the config server rather than being restated in every service,
+         where they would drift apart one commit at a time.
+
+         Deliberately without spring-retry. Measured against spring-cloud-config-client 4.3.0,
+         the config-data import honours spring.cloud.config.retry.max-attempts but ignores
+         initial-interval, multiplier and max-interval: six attempts fire within three
+         milliseconds, which is one attempt wearing a costume. Compose orders auth-service
+         after the config server's healthcheck and restarts it on failure, which is the part
+         that actually works. -->
+    <dependency>
+      <groupId>org.springframework.cloud</groupId>
+      <artifactId>spring-cloud-starter-config</artifactId>
+    </dependency>
+
     <dependency>
       <groupId>org.springdoc</groupId>
       <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>

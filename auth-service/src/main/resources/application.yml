@@ -2,6 +2,27 @@ spring:
   application:
     name: auth-service
 
+  # Platform-wide defaults are served by the config server, not restated here. The served
+  # property source is inserted above this file, so a key set in both places silently resolves
+  # to the served value - which is why the shared defaults were deleted from here rather than
+  # left as harmless duplicates. A key belongs in exactly one of the two places.
+  # "optional:" refers to whether the location can be resolved at all, not to whether the
+  # server has to answer. It is required so that a test setting spring.cloud.config.enabled=false
+  # skips the import cleanly; without it the standard resolver tries to read "configserver:..."
+  # as a filename and the context fails to start. Refusing to boot when the server is down is
+  # fail-fast's job, below.
+  config:
+    import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
+
+  cloud:
+    config:
+      username: ${CONFIG_SERVER_USERNAME:finpay}
+      password: ${CONFIG_SERVER_PASSWORD:finpay}
+      # Refuse to start rather than boot on local defaults alone. A service that silently
+      # comes up without the platform's serialization and error rules is worse than one that
+      # does not come up: it answers requests, incorrectly.
+      fail-fast: true
+
   datasource:
     # Each service connects as its own role to its own database. Using the bootstrap
     # superuser here would silently defeat the database-per-service isolation that
@@ -86,26 +107,6 @@ management:
       endpoint: ${OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
 
 server:
+  # The port is this service's own; graceful shutdown and the error-rendering rules are
+  # platform defaults and come from the config server.
   port: 8081
-  shutdown: graceful
-  error:
-    include-stacktrace: never
-    include-message: never
-
-logging:
-  level:
-    root: INFO
-
----
-# Containers log structured JSON so a collector can index each field, including the request id
-# that ties a call together. Running locally the default human-readable format is kept: JSON is
-# for machines, and a developer reading a terminal is not one.
-spring:
-  config:
-    activate:
-      on-profile: docker
-
-logging:
-  structured:
-    format:
-      console: ecs
