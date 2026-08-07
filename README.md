@@ -57,6 +57,7 @@ required.
 
 ```text
 finpay/
+├── finpay-platform-web    Shared cross-cutting contracts only: request ids, error envelope
 ├── api-gateway            Single entry point, routing, token validation, rate limiting
 ├── auth-service           Registration, login, JWT issuance, refresh token rotation
 ├── user-service           Profiles, beneficiaries, KYC simulation, preferences
@@ -79,7 +80,9 @@ finpay/
 ### Architectural rules
 
 - One database per service; no service reads another service's tables.
-- No shared JPA entities and no shared module containing business logic.
+- No shared JPA entities and no shared module containing business logic. `finpay-platform-web` is the
+  one shared module, and it is limited to cross-cutting HTTP contracts: request-id propagation, the
+  error envelope, and structured logging support.
 - Kafka events for state propagation; OpenFeign only when a synchronous response is necessary.
 - Every write endpoint that can be submitted twice supports an `Idempotency-Key`.
 - Every service exposes health, readiness, metrics, and API documentation endpoints.
@@ -162,6 +165,8 @@ Present:
 - **Service registry** — authenticated standalone Eureka server, running as a container in the stack
 - **API gateway** — explicit routes for all eight domain services, load-balanced through the registry,
   with service-internal paths refused at the edge
+- **Cross-cutting web layer** — request ids propagated end to end, a single error envelope, and
+  structured JSON logging in containers
 
 **Not yet present:** database schemas, business logic, HTTP APIs, the frontend, and CI. The gateway is
 the only service registered with Eureka so far; routes resolve to nothing and return 503 until the

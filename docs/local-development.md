@@ -301,6 +301,74 @@ since it maps the internal topology.
 
 ---
 
+## Request tracing, errors and logs
+
+These three are one mechanism, provided by `finpay-platform-web`. A service gets all of it by
+adding the dependency — there is nothing to configure per service.
+
+### Request ids
+
+Every response carries `X-Request-Id`:
+
+```bash
+curl -i http://localhost:8080/api/v1/wallets/me | grep -i x-request-id
+```
+
+The gateway mints one when a caller sends none, adopts a well-formed one when they do, and
+**forwards it to the service it routes to**. Each service puts it in its logging context, so
+every line that request produces carries it as a field. One identifier therefore spans the
+gateway, the payment service, the wallet service and everything else a single transfer touches.
+
+Send your own to follow a specific call:
+
+```bash
+curl -i -H 'X-Request-Id: my-trace-1' http://localhost:8080/api/v1/wallets/me
+```
+
+An inbound id is only reused if it is at most 64 characters of letters, digits, `-` and `_`.
+Anything else is replaced, because the value ends up in log output and a caller must not be
+able to inject newlines and forge log entries.
+
+### Error envelope
+
+Every service and the gateway return the same shape:
+
+```json
+{
+  "timestamp": "2026-08-07T00:16:29.559094092Z",
+  "status": 503,
+  "error": "Service Unavailable",
+  "code": "SERVICE_UNAVAILABLE",
+  "message": "The service is temporarily unavailable. Please retry.",
+  "path": "/api/v1/wallets/me",
+  "requestId": "my-trace-1"
+}
+```
+
+`code` is the stable, machine-readable field clients branch on. `requestId` is the same value
+as the header, so a bug report that quotes it can be traced directly to the log lines.
+
+Responses never contain a stack trace, an exception type or message, SQL, or an internal host
+name. Unanticipated failures are logged in full at ERROR and reported to the caller as a bare
+`INTERNAL_ERROR` — the request id is what connects the two.
+
+Services declare their own error codes (`INSUFFICIENT_FUNDS`, `WALLET_FROZEN`, …) as enums
+implementing `ErrorCode`. Only protocol-level codes live in the shared `PlatformErrorCode`, so
+the shared module never accumulates the whole platform's vocabulary.
+
+### Structured logging
+
+Containers log one JSON object per line in ECS format, with the request id as a field:
+
+```bash
+docker compose logs config-server --tail=5
+```
+
+Running locally the human-readable format is kept — JSON is for log collectors, not for a
+developer reading a terminal. The switch is the `docker` profile, so it needs no code change.
+
+---
+
 ### Container images
 
 All services share one parameterised build, `infrastructure/docker/service.Dockerfile`,

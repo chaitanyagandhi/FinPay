@@ -17,7 +17,10 @@ WORKDIR /build
 
 # Build descriptors first: dependency resolution is the slow part and only needs to re-run
 # when a POM changes, not when source changes.
+# Every module listed in the parent POM must be present or the reactor refuses to load, even
+# when only one of them is being built.
 COPY pom.xml ./
+COPY finpay-platform-web/pom.xml finpay-platform-web/
 COPY api-gateway/pom.xml api-gateway/
 COPY audit-service/pom.xml audit-service/
 COPY auth-service/pom.xml auth-service/
@@ -33,6 +36,8 @@ COPY wallet-service/pom.xml wallet-service/
 RUN --mount=type=cache,target=/root/.m2 \
     mvn -B -pl ${MODULE} -am dependency:go-offline -DskipTests
 
+# Every service depends on the shared cross-cutting module, and -am builds it from source.
+COPY finpay-platform-web/src finpay-platform-web/src
 COPY ${MODULE}/src ${MODULE}/src
 
 # Tests and formatting are gates in `make verify` and in CI. Running them here would

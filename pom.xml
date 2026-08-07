@@ -20,6 +20,12 @@
   -->
 
   <modules>
+    <!--
+      Shared cross-cutting contracts only: request-id propagation, the error envelope and
+      structured logging support. Business logic and domain types stay inside the service
+      that owns them, so this module never becomes a dumping ground.
+    -->
+    <module>finpay-platform-web</module>
     <!-- Platform -->
     <module>config-server</module>
     <module>service-registry</module>

@@ -221,6 +221,7 @@ services:
     environment:
       # The registry advertises this hostname to clients, so it has to be the name other
       # containers resolve rather than the container's own id.
+      SPRING_PROFILES_ACTIVE: docker
       EUREKA_HOSTNAME: service-registry
       EUREKA_USERNAME: ${EUREKA_USERNAME:-finpay}
       EUREKA_PASSWORD: ${EUREKA_PASSWORD:-finpay}
@@ -258,6 +259,7 @@ services:
       service-registry:
         condition: service_healthy
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       EUREKA_HOST: service-registry
       EUREKA_PORT: "8761"
       EUREKA_USERNAME: ${EUREKA_USERNAME:-finpay}

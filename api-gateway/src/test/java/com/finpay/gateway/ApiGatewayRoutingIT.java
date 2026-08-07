@@ -7,6 +7,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -21,6 +22,8 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
+
+import com.finpay.platform.web.RequestCorrelation;
 
 /**
  * Exercises the gateway against a real downstream HTTP server.
@@ -170,6 +173,113 @@ class ApiGatewayRoutingIT {
     void reportsUnavailableServiceWhenNoInstanceIsRegistered() {
         // wallet-service is routed but nothing is registered for it in this test.
         webTestClient.get().uri("/api/v1/wallets/me").exchange().expectStatus().isEqualTo(503);
+    }
+
+    // --- request id ------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("passes the request id to the downstream service so one id spans the whole call")
+    void forwardsRequestIdDownstream() {
+        authService.stubFor(get(urlPathEqualTo("/api/v1/auth/sessions"))
+                .willReturn(aResponse().withStatus(200)));
+
+        String returnedId = webTestClient
+                .get()
+                .uri("/api/v1/auth/sessions")
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectHeader()
+                .exists(RequestCorrelation.REQUEST_ID_HEADER)
+                .returnResult(Void.class)
+                .getResponseHeaders()
+                .getFirst(RequestCorrelation.REQUEST_ID_HEADER);
+
+        // The id the caller is given must be the same one the service was told about, otherwise
+        // the two sets of log lines cannot be joined.
+        authService.verify(getRequestedFor(urlPathEqualTo("/api/v1/auth/sessions"))
+                .withHeader(RequestCorrelation.REQUEST_ID_HEADER, equalTo(returnedId)));
+    }
+
+    @Test
+    @DisplayName("adopts a caller-supplied request id and forwards that one")
+    void adoptsAndForwardsInboundRequestId() {
+        authService.stubFor(get(urlPathEqualTo("/api/v1/auth/sessions"))
+                .willReturn(aResponse().withStatus(200)));
+
+        webTestClient
+                .get()
+                .uri("/api/v1/auth/sessions")
+                .header(RequestCorrelation.REQUEST_ID_HEADER, "req-client-42")
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectHeader()
+                .valueEquals(RequestCorrelation.REQUEST_ID_HEADER, "req-client-42");
+
+        authService.verify(getRequestedFor(urlPathEqualTo("/api/v1/auth/sessions"))
+                .withHeader(RequestCorrelation.REQUEST_ID_HEADER, equalTo("req-client-42")));
+    }
+
+    // --- error envelope --------------------------------------------------------------------
+
+    @Test
+    @DisplayName("renders an unreachable service in the platform error envelope")
+    void rendersUnavailableServiceInPlatformEnvelope() {
+        webTestClient
+                .get()
+                .uri("/api/v1/wallets/me")
+                .exchange()
+                .expectStatus()
+                .isEqualTo(503)
+                .expectBody()
+                .jsonPath("$.status")
+                .isEqualTo(503)
+                .jsonPath("$.code")
+                .isEqualTo("SERVICE_UNAVAILABLE")
+                .jsonPath("$.path")
+                .isEqualTo("/api/v1/wallets/me")
+                .jsonPath("$.requestId")
+                .isNotEmpty()
+                .jsonPath("$.timestamp")
+                .isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("renders an unrouted path in the platform error envelope")
+    void rendersNotFoundInPlatformEnvelope() {
+        webTestClient
+                .get()
+                .uri("/api/v1/does-not-exist")
+                .exchange()
+                .expectStatus()
+                .isNotFound()
+                .expectBody()
+                .jsonPath("$.code")
+                .isEqualTo("RESOURCE_NOT_FOUND")
+                .jsonPath("$.requestId")
+                .isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("never names an internal host, class or exception in an error body")
+    void errorBodyRevealsNoInternals() {
+        String body = new String(webTestClient
+                .get()
+                .uri("/api/v1/wallets/me")
+                .exchange()
+                .expectStatus()
+                .isEqualTo(503)
+                .expectBody()
+                .returnResult()
+                .getResponseBodyContent());
+
+        assertThat(body)
+                .doesNotContain("wallet-service")
+                .doesNotContain("lb://")
+                .doesNotContain("Exception")
+                .doesNotContain("org.springframework")
+                .doesNotContain("trace");
     }
 
     @Test

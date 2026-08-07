@@ -1,6 +1,13 @@
 # Overrides for services running as containers inside the compose network, where
 # infrastructure is addressed by service name rather than through published host ports.
 
+logging:
+  structured:
+    format:
+      # Containers emit one JSON object per line so a collector can index each field,
+      # including the request id that ties a call together across services.
+      console: ecs
+
 spring:
   kafka:
     bootstrap-servers: kafka:9092

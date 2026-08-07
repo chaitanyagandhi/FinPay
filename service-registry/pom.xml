@@ -16,6 +16,11 @@
 
   <dependencies>
     <dependency>
+      <groupId>com.finpay</groupId>
+      <artifactId>finpay-platform-web</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
       <groupId>org.springframework.cloud</groupId>
       <artifactId>spring-cloud-starter-netflix-eureka-server</artifactId>
     </dependency>

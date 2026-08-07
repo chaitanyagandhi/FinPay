@@ -42,3 +42,17 @@ management:
 logging:
   level:
     root: INFO
+
+---
+# Containers log structured JSON so a collector can index each field, including the request id
+# that ties a call together. Running locally the default human-readable format is kept: JSON is
+# for machines, and a developer reading a terminal is not one.
+spring:
+  config:
+    activate:
+      on-profile: docker
+
+logging:
+  structured:
+    format:
+      console: ecs
