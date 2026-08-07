@@ -16,10 +16,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.util.StringUtils;
 
+import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
@@ -40,7 +43,7 @@ import com.nimbusds.jose.proc.SecurityContext;
  * discovered.
  */
 @Configuration
-@EnableConfigurationProperties(JwtProperties.class)
+@EnableConfigurationProperties({JwtProperties.class, RefreshTokenProperties.class})
 public class JwtKeyConfig {
 
     private static final Logger log = LoggerFactory.getLogger(JwtKeyConfig.class);
@@ -55,21 +58,40 @@ public class JwtKeyConfig {
      * signed by either are still in flight.
      */
     @Bean
-    public JWKSource<SecurityContext> jwkSource(
+    public RSAKey signingKey(
             @Value("${finpay.auth.jwt.private-key:}") String privateKeyPem,
             @Value("${finpay.auth.jwt.public-key:}") String publicKeyPem,
             @Value("${finpay.auth.jwt.key-id:}") String configuredKeyId) {
 
-        RSAKey key = StringUtils.hasText(privateKeyPem)
+        return StringUtils.hasText(privateKeyPem)
                 ? fromConfiguration(privateKeyPem, publicKeyPem, configuredKeyId)
                 : generated();
+    }
 
-        return new ImmutableJWKSet<>(new JWKSet(key));
+    @Bean
+    public JWKSource<SecurityContext> jwkSource(RSAKey signingKey) {
+        return new ImmutableJWKSet<>(new JWKSet(signingKey));
     }
 
     @Bean
     public JwtEncoder jwtEncoder(JWKSource<SecurityContext> jwkSource) {
         return new NimbusJwtEncoder(jwkSource);
+    }
+
+    /**
+     * Verifies access tokens that this service itself issued.
+     *
+     * <p>Needed by logout, which reads the {@code jti} of the token being withdrawn. The signature
+     * is checked rather than the token merely parsed: accepting an unverified {@code jti} would
+     * let anyone denylist anyone else's access token by presenting a forgery.
+     *
+     * <p>This is a decoder, not a filter chain. auth-service still has no Spring Security web
+     * configuration, and its endpoints stay public - see the note on the security dependencies in
+     * this module's POM.
+     */
+    @Bean
+    public JwtDecoder jwtDecoder(RSAKey signingKey) throws JOSEException {
+        return NimbusJwtDecoder.withPublicKey(signingKey.toRSAPublicKey()).build();
     }
 
     private RSAKey fromConfiguration(String privateKeyPem, String publicKeyPem, String keyId) {

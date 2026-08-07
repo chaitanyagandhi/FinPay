@@ -49,6 +49,7 @@ public class LoginService {
     private final LoginAttemptRecorder failureRecorder;
     private final PasswordEncoder passwordEncoder;
     private final AccessTokenIssuer accessTokenIssuer;
+    private final RefreshTokenService refreshTokenService;
 
     public LoginService(
             UserRepository users,
@@ -56,13 +57,15 @@ public class LoginService {
             LoginAttemptRepository loginAttempts,
             LoginAttemptRecorder failureRecorder,
             PasswordEncoder passwordEncoder,
-            AccessTokenIssuer accessTokenIssuer) {
+            AccessTokenIssuer accessTokenIssuer,
+            RefreshTokenService refreshTokenService) {
         this.users = users;
         this.credentials = credentials;
         this.loginAttempts = loginAttempts;
         this.failureRecorder = failureRecorder;
         this.passwordEncoder = passwordEncoder;
         this.accessTokenIssuer = accessTokenIssuer;
+        this.refreshTokenService = refreshTokenService;
     }
 
     /**
@@ -100,9 +103,14 @@ public class LoginService {
         loginAttempts.save(LoginAttempt.success(user.getId(), email, client.ipAddress(), client.userAgent()));
 
         AccessTokenIssuer.AccessToken token = accessTokenIssuer.issue(user);
+        // A new family per sign-in, so revoking this session later leaves the user's other
+        // sessions alone. Issued inside this transaction: a session that exists without the
+        // sign-in that created it would be a hole in the audit trail.
+        RefreshTokenService.IssuedRefreshToken refreshToken = refreshTokenService.startFamily(user, client);
         log.info("Issued access token {} for user {}", token.tokenId(), user.getId());
 
-        return LoginResponse.bearer(token.value(), token.issuedAt(), token.expiresAt());
+        return LoginResponse.bearer(
+                token.value(), token.issuedAt(), token.expiresAt(), refreshToken.value(), refreshToken.expiresAt());
     }
 
     private boolean passwordMatches(User user, String presented) {

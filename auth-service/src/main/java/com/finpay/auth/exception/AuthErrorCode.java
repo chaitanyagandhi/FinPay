@@ -29,7 +29,17 @@ public enum AuthErrorCode implements ErrorCode {
      * A client cannot tell which, and that is the point: separate codes would turn this endpoint
      * into a way of discovering which addresses have accounts.
      */
-    INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED);
+    INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED),
+
+    /**
+     * A refresh token was not accepted.
+     *
+     * <p>One code covers unknown, expired, already-spent and revoked, for the same reason
+     * {@link #INVALID_CREDENTIALS} covers four causes. In particular it must not distinguish
+     * "reuse detected": a separate code would confirm to whoever presented a stolen token both
+     * that the token was genuine and that the theft has been noticed.
+     */
+    INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED);
 
     private final HttpStatus httpStatus;
 
