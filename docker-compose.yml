@@ -243,3 +243,39 @@ services:
         limits:
           cpus: "1.0"
           memory: 512m
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/service.Dockerfile
+      args:
+        MODULE: api-gateway
+        SERVICE_PORT: "8080"
+    image: finpay/api-gateway:0.1.0-SNAPSHOT
+    container_name: finpay-api-gateway
+    restart: unless-stopped
+    depends_on:
+      service-registry:
+        condition: service_healthy
+    environment:
+      EUREKA_HOST: service-registry
+      EUREKA_PORT: "8761"
+      EUREKA_USERNAME: ${EUREKA_USERNAME:-finpay}
+      EUREKA_PASSWORD: ${EUREKA_PASSWORD:-finpay}
+      TZ: UTC
+    # The only application port published to the host: everything else is reached through here.
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks:
+      - finpay
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512m

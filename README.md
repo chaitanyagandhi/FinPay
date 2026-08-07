@@ -160,9 +160,12 @@ Present:
 - **Config server** — authenticated, serving shared and per-environment configuration, running as a
   container in the stack
 - **Service registry** — authenticated standalone Eureka server, running as a container in the stack
+- **API gateway** — explicit routes for all eight domain services, load-balanced through the registry,
+  with service-internal paths refused at the edge
 
-**Not yet present:** the gateway, database schemas, business logic, HTTP APIs, the frontend, and CI.
-Nothing registers with Eureka yet — the domain services become discovery clients as they are built.
+**Not yet present:** database schemas, business logic, HTTP APIs, the frontend, and CI. The gateway is
+the only service registered with Eureka so far; routes resolve to nothing and return 503 until the
+domain services exist.
 
 Full setup, command reference, and troubleshooting: **[docs/local-development.md](docs/local-development.md)**.
 
@@ -224,6 +227,7 @@ make db       # psql into a service database as its own role
 | Kafka UI | http://localhost:8090 | 8080 is reserved for the API gateway |
 | Config server | http://localhost:8888 | HTTP Basic; `/actuator/health` is anonymous |
 | Eureka dashboard | http://localhost:8761 | HTTP Basic; `/actuator/health` is anonymous |
+| API gateway | http://localhost:8080 | The only application port clients use |
 
 Compose only contains the backing services for now. Application containers are added in the steps that
 implement them, so `docker compose up -d` always reaches a healthy state.
@@ -244,7 +248,7 @@ is overridable; `make env` copies it to a git-ignored `.env`.
 | ------ | ---- | -------------- |
 | `config-server` | 8888 | Centralized configuration — **implemented** |
 | `service-registry` | 8761 | Eureka service discovery — **implemented** |
-| `api-gateway` | 8080 | Public entry point |
+| `api-gateway` | 8080 | Public entry point — **implemented** |
 | `auth-service` | 8081 | Authentication and tokens |
 | `user-service` | 8082 | Profiles and beneficiaries |
 | `wallet-service` | 8083 | Balances and fund operations |

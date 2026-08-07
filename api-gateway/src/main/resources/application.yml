@@ -2,5 +2,97 @@ spring:
   application:
     name: api-gateway
 
+  cloud:
+    gateway:
+      server:
+        webflux:
+          discovery:
+            locator:
+              # Never publish routes automatically from the registry. Doing so would expose
+              # every service the moment it registers, including its /internal endpoints, and
+              # would make the public API surface a side effect of deployment rather than a
+              # deliberate decision. Routes below are explicit.
+              enabled: false
+
+          httpclient:
+            # A downstream that never answers must not hold a gateway connection open
+            # indefinitely. Resilience4j adds per-route circuit breaking and bulkheads later;
+            # these are the transport-level floor.
+            connect-timeout: 2000
+            response-timeout: 10s
+
+          routes:
+            - id: auth-service
+              uri: lb://auth-service
+              predicates:
+                - Path=/api/v1/auth/**
+
+            - id: user-service
+              uri: lb://user-service
+              predicates:
+                - Path=/api/v1/users/**,/api/v1/beneficiaries/**
+
+            - id: wallet-service
+              uri: lb://wallet-service
+              predicates:
+                - Path=/api/v1/wallets/**
+
+            - id: transaction-service
+              uri: lb://transaction-service
+              predicates:
+                - Path=/api/v1/transactions/**,/api/v1/statements/**
+
+            - id: payment-service
+              uri: lb://payment-service
+              predicates:
+                - Path=/api/v1/payments/**,/api/v1/payment-requests/**
+
+            - id: fraud-service
+              uri: lb://fraud-service
+              predicates:
+                - Path=/api/v1/admin/fraud/**
+
+            - id: notification-service
+              uri: lb://notification-service
+              predicates:
+                - Path=/api/v1/notifications/**,/api/v1/notification-preferences/**
+
+            - id: audit-service
+              uri: lb://audit-service
+              predicates:
+                - Path=/api/v1/admin/audit-events/**
+
 server:
   port: 8080
+  shutdown: graceful
+  error:
+    include-stacktrace: never
+    include-message: never
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${EUREKA_USERNAME:finpay}:${EUREKA_PASSWORD:finpay}@${EUREKA_HOST:localhost}:${EUREKA_PORT:8761}/eureka/
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    # Containers are addressed by IP inside the compose network; the container hostname is
+    # not resolvable by other services.
+    prefer-ip-address: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # The gateway actuator endpoint lists every route and its target, which is a map of
+        # the internal topology. It stays unexposed until the gateway is authenticated.
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when-authorized
+
+logging:
+  level:
+    root: INFO

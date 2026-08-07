@@ -54,6 +54,9 @@
     <spotless-maven-plugin.version>2.44.5</spotless-maven-plugin.version>
     <palantir-java-format.version>2.68.0</palantir-java-format.version>
 
+    <!-- Test libraries not managed by the Spring Boot BOM -->
+    <wiremock.version>3.13.1</wiremock.version>
+
     <!-- Build behaviour toggles -->
     <skip.integration.tests>false</skip.integration.tests>
   </properties>
@@ -73,6 +76,14 @@
         <version>${spring-cloud.version}</version>
         <type>pom</type>
         <scope>import</scope>
+      </dependency>
+      <!-- The standalone (shaded) build bundles its own Jetty. The plain artifact expects Jetty
+           on the classpath, which a Netty-based WebFlux service does not have. -->
+      <dependency>
+        <groupId>org.wiremock</groupId>
+        <artifactId>wiremock-standalone</artifactId>
+        <version>${wiremock.version}</version>
+        <scope>test</scope>
       </dependency>
     </dependencies>
   </dependencyManagement>

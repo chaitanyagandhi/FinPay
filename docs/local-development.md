@@ -3,8 +3,8 @@
 How to build FinPay and run its supporting infrastructure on your own machine.
 
 > **Scope.** At this point in the build the repository contains the Maven multi-module
-> project, the backing services (PostgreSQL, Redis, Kafka, Kafka UI), the config server, and
-> the service registry. The remaining application services join `docker-compose.yml` in the
+> project, the backing services (PostgreSQL, Redis, Kafka, Kafka UI), the config server, the
+> service registry, and the API gateway. The domain services join `docker-compose.yml` in the
 > steps that implement them.
 
 ---
@@ -114,6 +114,7 @@ mistake shows up in your shell rather than at runtime.
 | Kafka UI | http://localhost:8090 | `kafka-ui:8080` |
 | Config server | http://localhost:8888 | `config-server:8888` |
 | Service registry | http://localhost:8761 | `service-registry:8761` |
+| API gateway | http://localhost:8080 | `api-gateway:8080` |
 
 Kafka advertises two listeners. Use `localhost:29092` from your IDE, tests and host
 processes; containers use `kafka:9092`. Mixing them up produces a connection that succeeds
@@ -237,6 +238,68 @@ become discovery clients as they are implemented, so the registry is empty until
   network partition. With a handful of local instances the same behaviour leaves dead
   services listed as UP for a long time, so `docker-compose.yml` disables it. The application
   default stays `true`, which is what a deployment wants.
+
+---
+
+## API gateway
+
+Everything a client touches goes through `http://localhost:8080`. It is the only application
+port published to the host; the domain services are reachable only inside the compose network.
+
+### Routes
+
+| Path prefix | Service |
+| ----------- | ------- |
+| `/api/v1/auth/**` | auth-service |
+| `/api/v1/users/**`, `/api/v1/beneficiaries/**` | user-service |
+| `/api/v1/wallets/**` | wallet-service |
+| `/api/v1/transactions/**`, `/api/v1/statements/**` | transaction-service |
+| `/api/v1/payments/**`, `/api/v1/payment-requests/**` | payment-service |
+| `/api/v1/admin/fraud/**` | fraud-service |
+| `/api/v1/notifications/**`, `/api/v1/notification-preferences/**` | notification-service |
+| `/api/v1/admin/audit-events/**` | audit-service |
+
+Targets are `lb://` URIs resolved against Eureka, so an instance can move or scale out without
+a route change. Automatic discovery-based routing is **off**: routes are declared explicitly,
+because deriving them from the registry would publish every service the moment it registers.
+
+### What to expect right now
+
+No domain service exists yet, so a routed path returns **503** — the route matches but the
+load balancer finds no instance:
+
+```bash
+curl -i http://localhost:8080/api/v1/wallets/me     # 503, route exists, no instance
+curl -i http://localhost:8080/api/v1/does-not-exist # 404, no route
+```
+
+The gateway itself registers with Eureka, so it appears in the dashboard as `API-GATEWAY`.
+That is currently the only registration.
+
+### Service-internal paths are refused
+
+Wallet operations such as reserve, release, credit and finalize-debit live under `/internal`
+and move money without the checks the public API applies. They must never be reachable from
+outside:
+
+```bash
+curl -i -X POST http://localhost:8080/internal/v1/wallets/1/reserve  # 404
+```
+
+Two independent layers enforce this: no route maps `/internal/**`, and a filter ahead of
+routing rejects any path containing an `internal` segment — including one reached by traversal
+such as `/api/v1/../internal/...`. The response is 404 rather than 403 so it does not confirm
+the path exists. The check is per segment, so a legitimate path like
+`/api/v1/internal-transfers` is unaffected.
+
+### Not yet at the gateway
+
+Token validation (Phase 2), request-ID propagation and the shared error format (Step 8),
+security headers and CORS (Step 70), and rate limiting (Step 68). The `/actuator/gateway`
+endpoint that lists routes and targets stays unexposed until the gateway is authenticated,
+since it maps the internal topology.
+
+---
 
 ### Container images
 
