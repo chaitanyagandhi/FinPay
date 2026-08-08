@@ -30,6 +30,22 @@
       <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
     </dependency>
 
+    <!-- Validates access tokens at the edge. The resource-server starter only verifies tokens;
+         it holds nothing that could mint one, which is the entire reason auth-service signs with
+         a key pair rather than a shared secret. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+    </dependency>
+
+    <!-- Reads the revocation denylist auth-service publishes. Reactive because this is on the
+         hot path of a WebFlux gateway: a blocking lookup here would occupy an event-loop thread
+         for every authenticated request on the platform. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
+    </dependency>
+
     <!-- Aggregated API documentation: one Swagger page covering every service, served at the
          same address clients already use. -->
     <dependency>
@@ -41,6 +57,20 @@
     <dependency>
       <groupId>org.wiremock</groupId>
       <artifactId>wiremock-standalone</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- The revocation denylist is read from a real Redis of the version compose runs. The
+         check fails closed, so the gateway genuinely cannot serve authenticated traffic without
+         one - a fake would hide exactly that. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-testcontainers</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>junit-jupiter</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

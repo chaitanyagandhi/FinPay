@@ -20,9 +20,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
@@ -45,17 +50,32 @@ import com.finpay.platform.web.RequestCorrelation;
             // to reach a registry that is not running.
             "eureka.client.enabled=false",
             "spring.cloud.discovery.client.simple.instances.auth-service[0].uri=http://localhost:${wiremock.port}",
+            // Keys are fetched from the stubbed downstream, exactly as they are fetched from
+            // auth-service in production.
+            "finpay.gateway.jwt.jwk-set-uri=http://localhost:${wiremock.port}" + TestTokens.JWKS_PATH,
             "management.server.port=" + ApiGatewayRoutingIT.MANAGEMENT_PORT,
         })
 // Spring Boot switches metrics export off inside @SpringBootTest; without this the
 // Prometheus endpoint is simply not registered. Tracing stays off: no collector runs here.
 @AutoConfigureObservability(tracing = false)
+@Testcontainers
 class ApiGatewayRoutingIT {
 
     /** Fixed so the test knows where actuator is; modules build sequentially. */
     static final String MANAGEMENT_PORT = "19193";
 
     private static WireMockServer authService;
+
+    /** Real RS256 tokens: mocking the decoder would remove the behaviour under test. */
+    private static final TestTokens TOKENS = new TestTokens();
+
+    /**
+     * The revocation denylist is consulted on every authenticated request and fails closed, so
+     * the gateway genuinely cannot serve authenticated traffic without it.
+     */
+    @Container
+    @ServiceConnection(name = "redis")
+    static final GenericContainer<?> REDIS = new GenericContainer<>("redis:8.10.0-alpine").withExposedPorts(6379);
 
     @Autowired
     private WebTestClient webTestClient;
@@ -83,6 +103,22 @@ class ApiGatewayRoutingIT {
     @BeforeEach
     void resetStubs() {
         authService.resetAll();
+
+        // Re-stubbed after every reset: the gateway fetches this the first time it has a token
+        // to verify, and a missing key set would fail every request for a reason unrelated to
+        // whatever the test is actually about.
+        authService.stubFor(get(urlEqualTo(TestTokens.JWKS_PATH))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody(TOKENS.jwkSetJson())));
+
+        // This suite is about routing, so every request carries a valid token by default.
+        // GatewayAuthenticationIT covers which requests are allowed to go without one.
+        webTestClient = webTestClient
+                .mutate()
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + TOKENS.valid())
+                .build();
     }
 
     @Test

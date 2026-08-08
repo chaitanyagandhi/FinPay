@@ -39,16 +39,19 @@ public class LogoutService {
     private final TokenRevoker revoker;
     private final RevokedTokenRepository revokedTokens;
     private final JwtDecoder jwtDecoder;
+    private final TokenDenylist denylist;
 
     public LogoutService(
             RefreshTokenService refreshTokenService,
             TokenRevoker revoker,
             RevokedTokenRepository revokedTokens,
-            JwtDecoder jwtDecoder) {
+            JwtDecoder jwtDecoder,
+            TokenDenylist denylist) {
         this.refreshTokenService = refreshTokenService;
         this.revoker = revoker;
         this.revokedTokens = revokedTokens;
         this.jwtDecoder = jwtDecoder;
+        this.denylist = denylist;
     }
 
     /**
@@ -102,16 +105,23 @@ public class LogoutService {
             return;
         }
 
+        Instant tokenExpiry = jwt.getExpiresAt() != null ? jwt.getExpiresAt() : Instant.now();
+
         if (revokedTokens.existsByJti(jti)) {
             // Logging out twice with the same token is not an error, and the unique constraint on
-            // jti would otherwise turn the second call into a 500.
+            // jti would otherwise turn the second call into a 500. The denylist is republished
+            // anyway: the earlier attempt may have been the one that could not reach Redis.
+            denylist.revoke(jti, tokenExpiry);
             return;
         }
 
         UUID userId = jwt.getSubject() != null ? UUID.fromString(jwt.getSubject()) : userIdFromSession;
-        Instant expiresAt = jwt.getExpiresAt() != null ? jwt.getExpiresAt() : Instant.now();
 
-        revokedTokens.save(new RevokedToken(jti, userId, TokenRevocationReason.LOGOUT, expiresAt));
-        log.info("Denylisted access token {} until {}", jti, expiresAt);
+        // The durable record first: it is the one an auditor reads and the one that survives a
+        // Redis restart. Publishing to the denylist is what actually stops the token being
+        // accepted, and is deliberately best effort.
+        revokedTokens.save(new RevokedToken(jti, userId, TokenRevocationReason.LOGOUT, tokenExpiry));
+        denylist.revoke(jti, tokenExpiry);
+        log.info("Denylisted access token {} until {}", jti, tokenExpiry);
     }
 }

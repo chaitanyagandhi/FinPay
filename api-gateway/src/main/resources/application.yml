@@ -2,6 +2,14 @@ spring:
   application:
     name: api-gateway
 
+  data:
+    redis:
+      # The revocation denylist auth-service publishes. Addressed per environment, like every
+      # other piece of infrastructure; the password is resolved from this service's environment.
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
   cloud:
     gateway:
       server:
@@ -141,6 +149,18 @@ server:
   error:
     include-stacktrace: never
     include-message: never
+
+finpay:
+  gateway:
+    jwt:
+      # Fetched lazily, on the first token that needs verifying, so the gateway does not depend
+      # on auth-service being up to start. The gateway holds only the public half and could not
+      # mint a token if it wanted to.
+      jwk-set-uri: ${JWKS_URI:http://localhost:8081/api/v1/auth/.well-known/jwks.json}
+      # Must match what AccessTokenIssuer puts in the token. Both are checked: skipping the
+      # audience would accept a token minted for any other system sharing the signing key.
+      issuer: ${JWT_ISSUER:https://finpay.local/auth}
+      audience: ${JWT_AUDIENCE:finpay}
 
 eureka:
   client:

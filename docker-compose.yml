@@ -261,6 +261,10 @@ services:
     depends_on:
       service-registry:
         condition: service_healthy
+      # The revocation denylist is read from here on every authenticated request, and the check
+      # fails closed - so the gateway should not start answering before Redis is ready.
+      redis:
+        condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: docker
       OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
@@ -268,6 +272,11 @@ services:
       EUREKA_PORT: "8761"
       EUREKA_USERNAME: ${EUREKA_USERNAME:-finpay}
       EUREKA_PASSWORD: ${EUREKA_PASSWORD:-finpay}
+      # Verifying keys are fetched from auth-service, in-network. Lazily, so no start ordering
+      # is implied: the gateway comes up whether or not auth-service is running yet.
+      JWKS_URI: http://auth-service:8081/api/v1/auth/.well-known/jwks.json
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-finpay}
       TZ: UTC
     # The only application port published to the host: everything else is reached through here.
     ports:
