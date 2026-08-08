@@ -2,5 +2,106 @@ spring:
   application:
     name: user-service
 
+  # Platform-wide defaults are served by the config server, not restated here. The served
+  # property source is inserted above this file, so a key set in both places silently resolves
+  # to the served value - a key belongs in exactly one of the two places.
+  # "optional:" refers to whether the location can be resolved at all, not to whether the server
+  # has to answer; a test setting spring.cloud.config.enabled=false needs it, or the standard
+  # resolver tries to read "configserver:..." as a filename. Refusing to boot when the server is
+  # down is fail-fast's job, below.
+  config:
+    import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
+
+  cloud:
+    config:
+      username: ${CONFIG_SERVER_USERNAME:finpay}
+      password: ${CONFIG_SERVER_PASSWORD:finpay}
+      # Refuse to start rather than boot on local defaults alone: a service that comes up
+      # without the platform's serialization and error rules answers requests, incorrectly.
+      fail-fast: true
+
+  datasource:
+    # Its own database, as its own role. Using the bootstrap superuser would silently defeat the
+    # database-per-service isolation the init script enforces.
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:finpay_user}
+    username: ${DB_USERNAME:finpay_user}
+    password: ${DB_PASSWORD:finpay}
+    hikari:
+      pool-name: user-service-pool
+      maximum-pool-size: ${DB_POOL_MAX:10}
+      minimum-idle: 2
+      connection-timeout: 3000
+      leak-detection-threshold: 30000
+
+  jpa:
+    # Flyway owns the schema. "validate" makes Hibernate refuse to start if the entities and the
+    # migrated tables disagree, turning a silent mismatch into a failed boot.
+    hibernate:
+      ddl-auto: validate
+    # Off deliberately: a lazy association initialised while a response is rendered hides N+1
+    # queries and holds a connection for the whole request.
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        query:
+          fail_on_pagination_over_collection_fetch: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+    validate-on-migrate: true
+    clean-disabled: true
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${EUREKA_USERNAME:finpay}:${EUREKA_PASSWORD:finpay}@${EUREKA_HOST:localhost}:${EUREKA_PORT:8761}/eureka/
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    prefer-ip-address: true
+
+finpay:
+  openapi:
+    title: FinPay User API
+    description: Profiles, contact details, preferences and payee directory for the FinPay platform.
+  user:
+    search:
+      # Short prefixes match most of the directory, which turns a payee lookup into a way of
+      # enumerating everyone who has an account.
+      minimum-term-length: 3
+      # Capped so one query cannot page through the whole user base.
+      maximum-results: 20
+
+management:
+  server:
+    port: ${MANAGEMENT_PORT:9090}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  observations:
+    key-values:
+      application: ${spring.application.name}
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLE_PROBABILITY:1.0}
+  otlp:
+    tracing:
+      endpoint: ${OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
+
 server:
+  # The port is this service's own; graceful shutdown and the error-rendering rules are platform
+  # defaults and come from the config server.
   port: 8082

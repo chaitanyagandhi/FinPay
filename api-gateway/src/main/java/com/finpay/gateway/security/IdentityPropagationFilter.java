@@ -14,6 +14,8 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 
+import com.finpay.platform.web.identity.IdentityHeaders;
+
 import reactor.core.publisher.Mono;
 
 /**
@@ -23,6 +25,10 @@ import reactor.core.publisher.Mono;
  * lookup the gateway has already done, on every request. The {@code Authorization} header is still
  * forwarded untouched, so a service can verify independently once it has reason to - these headers
  * are a convenience, not a replacement for that.
+ *
+ * <p>The header names come from {@code IdentityHeaders} in the shared module, which is also what
+ * every service reads. Both halves of the contract have to agree exactly, and a mismatch produces
+ * no error anywhere - the gateway writes a header nobody reads and the service sees no caller.
  *
  * <p><strong>Inbound copies are always removed, authenticated or not.</strong> Without that, a
  * caller could simply send {@code X-User-Id} and be believed by anything that trusts it - the
@@ -35,15 +41,6 @@ import reactor.core.publisher.Mono;
  */
 @Component
 public class IdentityPropagationFilter implements GlobalFilter, Ordered {
-
-    /** The authenticated subject: the user's id, as it appears in the token's {@code sub}. */
-    public static final String USER_ID = "X-User-Id";
-
-    /** Comma-separated roles, for services making an authorization decision. */
-    public static final String USER_ROLES = "X-User-Roles";
-
-    /** The token's unique id, so a downstream log line can be tied back to one session. */
-    public static final String TOKEN_ID = "X-Token-Id";
 
     private static final String ROLES_CLAIM = "roles";
 
@@ -70,12 +67,12 @@ public class IdentityPropagationFilter implements GlobalFilter, Ordered {
                 .mutate()
                 .headers(headers -> {
                     strip(headers);
-                    headers.set(USER_ID, jwt.getSubject());
+                    headers.set(IdentityHeaders.USER_ID, jwt.getSubject());
                     if (jwt.getId() != null) {
-                        headers.set(TOKEN_ID, jwt.getId());
+                        headers.set(IdentityHeaders.TOKEN_ID, jwt.getId());
                     }
                     if (!roles.isEmpty()) {
-                        headers.set(USER_ROLES, roles);
+                        headers.set(IdentityHeaders.USER_ROLES, roles);
                     }
                 })
                 .build();
@@ -104,9 +101,9 @@ public class IdentityPropagationFilter implements GlobalFilter, Ordered {
     }
 
     private void strip(org.springframework.http.HttpHeaders headers) {
-        headers.remove(USER_ID);
-        headers.remove(USER_ROLES);
-        headers.remove(TOKEN_ID);
+        headers.remove(IdentityHeaders.USER_ID);
+        headers.remove(IdentityHeaders.USER_ROLES);
+        headers.remove(IdentityHeaders.TOKEN_ID);
     }
 
     @Override

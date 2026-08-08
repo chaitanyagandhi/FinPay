@@ -1,5 +1,7 @@
 package com.finpay.platform.web.autoconfigure;
 
+import java.util.List;
+
 import jakarta.servlet.Filter;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -10,9 +12,12 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplicat
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.server.WebFilter;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import com.finpay.platform.web.reactive.RequestIdWebFilter;
+import com.finpay.platform.web.servlet.CallerIdentityArgumentResolver;
 import com.finpay.platform.web.servlet.GlobalExceptionHandler;
 import com.finpay.platform.web.servlet.RequestIdFilter;
 
@@ -45,6 +50,25 @@ public class PlatformWebAutoConfiguration {
         @ConditionalOnProperty(prefix = "finpay.web.error-handling", name = "enabled", matchIfMissing = true)
         GlobalExceptionHandler globalExceptionHandler() {
             return new GlobalExceptionHandler();
+        }
+
+        /**
+         * Lets any controller take a {@code CallerIdentity} parameter.
+         *
+         * <p>Registered as a {@link WebMvcConfigurer} rather than a bare bean: an argument
+         * resolver only takes effect once it is added to the resolver list, and a resolver bean
+         * nobody registered is silently ignored - the controller would simply fail to bind.
+         */
+        @Bean
+        @ConditionalOnMissingBean(name = "callerIdentityWebMvcConfigurer")
+        @ConditionalOnClass(WebMvcConfigurer.class)
+        WebMvcConfigurer callerIdentityWebMvcConfigurer() {
+            return new WebMvcConfigurer() {
+                @Override
+                public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
+                    resolvers.add(new CallerIdentityArgumentResolver());
+                }
+            };
         }
     }
 

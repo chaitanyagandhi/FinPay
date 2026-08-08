@@ -55,3 +55,10 @@ scrape_configs:
       - targets: ["auth-service:9090"]
         labels:
           service: auth-service
+
+  - job_name: user-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["user-service:9090"]
+        labels:
+          service: user-service
