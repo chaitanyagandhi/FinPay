@@ -157,6 +157,7 @@ class UserSchemaMigrationIT {
     @DisplayName("refuses a beneficiary who is the owner")
     void refusesSelfAsBeneficiary() {
         UUID owner = UUID.randomUUID();
+        insertProfile(owner, null);
 
         // Paying yourself is not a transfer; it can only be a mistake or a probe, and letting it
         // be saved means the payment service has to handle it later.
@@ -173,6 +174,7 @@ class UserSchemaMigrationIT {
     void refusesDuplicateBeneficiary() {
         UUID owner = UUID.randomUUID();
         UUID payee = UUID.randomUUID();
+        insertProfile(payee, null);
         insertBeneficiary(owner, payee);
 
         // Two identical entries make "which one did I pay" ambiguous in the one place it must not be.
@@ -180,9 +182,57 @@ class UserSchemaMigrationIT {
     }
 
     @Test
+    @DisplayName("refuses a payee who has no profile")
+    void refusesPayeeWithoutProfile() {
+        // V2's foreign key. A payee with no profile has no name, and a payment confirmation that
+        // cannot say who is being paid is worse than no confirmation at all.
+        assertThatThrownBy(() -> jdbc.update(
+                        "INSERT INTO beneficiaries (id, owner_user_id, beneficiary_user_id) VALUES (?, ?, ?)",
+                        UUID.randomUUID(),
+                        UUID.randomUUID(),
+                        UUID.randomUUID()))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("does not require the owner to have a profile")
+    void ownerNeedsNoProfile() {
+        // Deliberately asymmetric: gating a private action - saving a payee - on a public one -
+        // filling in your own profile - would be a rule with no purpose behind it.
+        UUID payee = UUID.randomUUID();
+        insertProfile(payee, null);
+
+        jdbc.update(
+                "INSERT INTO beneficiaries (id, owner_user_id, beneficiary_user_id) VALUES (?, ?, ?)",
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                payee);
+
+        assertThat(jdbc.queryForObject(
+                        "SELECT count(*) FROM beneficiaries WHERE beneficiary_user_id = ?", Integer.class, payee))
+                .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("removes a payee from every list when their profile is deleted")
+    void cascadesProfileDeletion() {
+        UUID payee = UUID.randomUUID();
+        insertProfile(payee, null);
+        insertBeneficiary(UUID.randomUUID(), payee);
+
+        jdbc.update("DELETE FROM user_profiles WHERE user_id = ?", payee);
+
+        // Otherwise the entry lingers as somebody nobody can render or pay.
+        assertThat(jdbc.queryForObject(
+                        "SELECT count(*) FROM beneficiaries WHERE beneficiary_user_id = ?", Integer.class, payee))
+                .isZero();
+    }
+
+    @Test
     @DisplayName("allows two owners to save the same payee")
     void allowsSharedPayee() {
         UUID payee = UUID.randomUUID();
+        insertProfile(payee, null);
 
         insertBeneficiary(UUID.randomUUID(), payee);
         insertBeneficiary(UUID.randomUUID(), payee);

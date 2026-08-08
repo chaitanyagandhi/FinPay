@@ -9,6 +9,9 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 
+import org.hibernate.annotations.Generated;
+import org.hibernate.generator.EventType;
+
 /**
  * The person behind an account.
  *
@@ -55,9 +58,16 @@ public class UserProfile {
     @Column(name = "avatar_url", length = 512)
     private String avatarUrl;
 
+    /**
+     * Written by the database default, so Hibernate has to read it back: without this the value
+     * returned to a caller is null for a column that is populated.
+     */
+    @Generated(event = EventType.INSERT)
     @Column(name = "created_at", insertable = false, updatable = false)
     private Instant createdAt;
 
+    /** Maintained by trigger on every write, so it is re-read after both insert and update. */
+    @Generated(event = {EventType.INSERT, EventType.UPDATE})
     @Column(name = "updated_at", insertable = false, updatable = false)
     private Instant updatedAt;
 
